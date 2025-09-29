@@ -41,6 +41,7 @@ BOARD_CUSTIMAGE_PARTITION_SIZE     := 20971520  # mtd8 (20480*1024)
 # Recovery
 BOARD_HAS_NO_SELECT_BUTTON := true
 TARGET_RECOVERY_FSTAB := device/huawei/y210/ramdisk/recovery/twrp.fstab
+BOARD_USE_CUSTOM_RECOVERY_FONT			:= "<font_7x16.h>"
 
 ifeq ($(TARGET_BUILD_VARIANT), eng)
   BOARD_CUSTOM_BOOTIMG_MK := device/huawei/y210/customrecoveryimg.mk
@@ -51,7 +52,7 @@ TARGET_RECOVERY_PIXEL_FORMAT := "RGB_565"
 TARGET_RECOVERY_INITRC := device/huawei/y210/ramdisk/recovery/init.rc
 TW_NO_EXFAT := true
 TW_OEM_BUILD := true
-TW_DEVICE_VERSION := -0.2
+TW_DEVICE_VERSION := -0.3
 TW_DEVICE_ID := Y210
 TARGET_RECOVERY_QCOM_RTC_FIX := true
 TW_INPUT_BLACKLIST := "hbtp_vm"
