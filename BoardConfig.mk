@@ -51,13 +51,10 @@ TW_THEME := portrait_mdpi
 TARGET_RECOVERY_PIXEL_FORMAT := "RGB_565"
 TARGET_RECOVERY_INITRC := device/huawei/y210/ramdisk/recovery/init.rc
 TW_DEVICE_VERSION := 0.4
-TW_DEVICE_ID := Y210
 TW_NO_REBOOT_BOOTLOADER := true
 
 BOARD_HAS_LARGE_FILESYSTEM := true
 
-# Usar modelo+hardware como device_id para las carpetas de backup
 TW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID := true
-
-# Habilita logcat dentro de recovery para depuración (sin logd)
 TWRP_INCLUDE_LOGCAT := true
+TW_NO_EXFAT := true

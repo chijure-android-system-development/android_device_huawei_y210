@@ -6,7 +6,7 @@
 
 Basic    | Spec Sheet
 --------:|:----------------------
-Chipset  | Qualcomm Snapdragon MSM7225A (Snapdragon S1)
+Chipset  | Qualcomm Snapdragon MSM7627A (Snapdragon S1)
 CPU      | 1.0 GHz Cortex-A5 (Single-core)
 GPU      | Adreno 200
 Memory   | 256 MB RAM
@@ -24,13 +24,12 @@ Release Date | January 2013
 
 ```
 source build/envsetup.sh
-export ALLOW_MISSING_DEPENDENCIES=true
 lunch omni_y210-eng
-mka recoveryimage
+make recoveryimage -j2
 ```
 
 ## How to Install:
-
+> - Reboot into bootloader mode: power off the device and hold Volume Down + Power.
 > - Flash the recovery.img using fastboot:
 >   ```
 >   fastboot flash recovery recovery.img
@@ -39,16 +38,15 @@ mka recoveryimage
 > - Done! You can now use TWRP on your Huawei Y210.
 
 ## Working Features List:
-> - [x] Mount /system, /data, /cache
-> - [x] Backup and restore of basic partitions
-> - [x] Zip installation
-> - [x] Partition wipe
-> - [x] ADB sideload
-> - [x] Reboot to system/recovery/bootloader
-> - [ ] MTP (may not be supported)
-> - [ ] Decrypt /data (not supported on Android 2.3)
-> - [ ] OTG (not supported by hardware)
-> - [ ] F2FS/EXT4/exFAT/NTFS (only EXT4 and yaffs2 supported)
+> - [x] Mount /system, /data, /cache (yaffs2)
+> - [x] Backup/restore de particiones básicas
+> - [x] Instalación de zips
+> - [x] Wipe de caché/datos
+> - [x] ADB (forzado en recovery)
+> - [ ] MTP (no soportado)
+> - [ ] Decrypt /data (no aplica en Android 2.3)
+> - [ ] OTG (no soportado por hardware)
+> - [ ] exFAT/NTFS (excluidos en build slim)
 
 ## Special thanks to:
 
