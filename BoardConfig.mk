@@ -50,27 +50,14 @@ endif
 TW_THEME := portrait_mdpi
 TARGET_RECOVERY_PIXEL_FORMAT := "RGB_565"
 TARGET_RECOVERY_INITRC := device/huawei/y210/ramdisk/recovery/init.rc
-TW_NO_EXFAT := true
-TW_OEM_BUILD := true
-TW_DEVICE_VERSION := -0.3
+TW_DEVICE_VERSION := 0.4
 TW_DEVICE_ID := Y210
-TARGET_RECOVERY_QCOM_RTC_FIX := true
-TW_INPUT_BLACKLIST := "hbtp_vm"
-TW_EXCLUDE_DEFAULT_USB_INIT := true
 TW_NO_REBOOT_BOOTLOADER := true
-TW_CUSTOM_POWER_BUTTON := true
-RECOVERY_TOUCHSCREEN_SWAP_XY := false
-RECOVERY_TOUCHSCREEN_FLIP_X := false
-RECOVERY_TOUCHSCREEN_FLIP_Y := false
-TW_IGNORE_MT_POSITION_0 := true
-TW_IGNORE_ABS_MT_TRACKING_ID := true
-TW_INCLUDE_CRYPTO := false
-TW_EXCLUDE_TWRPAPP := true
-TW_BRIGHTNESS_PATH := "/sys/class/leds/lcd-backlight/brightness"
-TW_MAX_BRIGHTNESS := 255
-TW_DEFAULT_BRIGHTNESS := 50
-TW_EXCLUDE_ENCRYPTED_BACKUPS := true
-TW_NO_CPU_TEMP := true
 
 BOARD_HAS_LARGE_FILESYSTEM := true
-BOARD_HAS_NO_SELECT_BUTTON := true
+
+# Usar modelo+hardware como device_id para las carpetas de backup
+TW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID := true
+
+# Habilita logcat dentro de recovery para depuración (sin logd)
+TWRP_INCLUDE_LOGCAT := true

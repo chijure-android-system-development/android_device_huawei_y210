@@ -3,6 +3,8 @@
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/recovery.fstab:recovery/root/etc/recovery.fstab
 
+PRODUCT_PACKAGES += adbd
+
 PRODUCT_DEVICE := y210
 PRODUCT_NAME := omni_y210
 PRODUCT_BRAND := Huawei
