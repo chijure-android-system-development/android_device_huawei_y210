@@ -42,6 +42,7 @@ BOARD_CUSTIMAGE_PARTITION_SIZE     := 20971520  # mtd8 (20480*1024)
 BOARD_HAS_NO_SELECT_BUTTON := true
 TARGET_RECOVERY_FSTAB := device/huawei/y210/ramdisk/recovery/twrp.fstab
 BOARD_USE_CUSTOM_RECOVERY_FONT			:= "<font_7x16.h>"
+TW_SECONDARY_BRIGHTNESS_PATH := "/sys/class/leds/button-backlight/brightness"
 
 ifeq ($(TARGET_BUILD_VARIANT), eng)
   BOARD_CUSTOM_BOOTIMG_MK := device/huawei/y210/customrecoveryimg.mk
@@ -50,8 +51,10 @@ endif
 TW_THEME := portrait_mdpi
 TARGET_RECOVERY_PIXEL_FORMAT := "RGB_565"
 TARGET_RECOVERY_INITRC := device/huawei/y210/ramdisk/recovery/init.rc
-TW_DEVICE_VERSION := 0.4
+TW_DEVICE_VERSION := 0.5
 TW_NO_REBOOT_BOOTLOADER := true
+TW_INCLUDE_CRYPTO := false
+TW_EXCLUDE_SUPERSU := true
 
 BOARD_HAS_LARGE_FILESYSTEM := true
 

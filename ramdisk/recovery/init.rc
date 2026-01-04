@@ -12,6 +12,7 @@ on init
     export ANDROID_DATA /data
     # export EXTERNAL_STORAGE /sdcard
     export EXTERNAL_STORAGE /external_sd
+    symlink /system/etc /etc
     
     mkdir /boot
     mkdir /recovery
@@ -27,16 +28,32 @@ on init
     
     # Create USB nodes if they don't exist
     mkdir -p /sys/class/android_usb/android0
-    
-    # Set USB configuration
+
+    # Set USB configuration (default to mtp,adb)
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 12d1
     write /sys/class/android_usb/android0/idProduct 1038
-    write /sys/class/android_usb/android0/functions adb
+    write /sys/class/android_usb/android0/functions mtp,adb
     write /sys/class/android_usb/android0/iManufacturer HUAWEI
     write /sys/class/android_usb/android0/iProduct "Huawei Y210"
     write /sys/class/android_usb/android0/iSerial MSM7627A
     write /sys/class/android_usb/android0/enable 1
+
+    # Fall back to usb_composite interface (old msm7x27a kernel)
+    write /sys/class/usb_composite/adb/enable 1
+    write /sys/class/usb_composite/mtp/enable 1
+    write /sys/class/usb_composite/usb_mass_storage/enable 0
+    write /sys/class/usb_composite/diag/enable 0
+    write /sys/class/usb_composite/rndis/enable 0
+    write /sys/class/usb_composite/rmnet/enable 0
+    write /sys/class/usb_composite/modem/enable 0
+    write /sys/class/usb_composite/nmea/enable 0
+
+    # Evita que usb_autorun intente un ISO inexistente: apunta el LUN0 al external_sd
+    write /sys/devices/platform/usb_mass_storage/lun0/file /dev/block/mmcblk0p1
+    write /sys/devices/platform/usb_mass_storage/lun0/ro 0
+    write /sys/devices/platform/usb_mass_storage/lun1/file ""
+    write /sys/devices/platform/usb_mass_storage/lun2/file ""
 
 
 on boot
@@ -47,10 +64,27 @@ on boot
     
     # Force start ADB for recovery
     write /sys/class/android_usb/android0/enable 0
-    write /sys/class/android_usb/android0/functions adb
+    write /sys/class/android_usb/android0/functions mtp,adb
     write /sys/class/android_usb/android0/enable 1
-    setprop sys.usb.config adb
-    setprop sys.usb.state adb
+    setprop sys.usb.config mtp,adb
+    setprop sys.usb.state mtp,adb
+
+    # Ensure only ADB+MTP are active on composite driver too
+    write /sys/class/usb_composite/adb/enable 1
+    write /sys/class/usb_composite/mtp/enable 1
+    write /sys/class/usb_composite/usb_mass_storage/enable 0
+    write /sys/class/usb_composite/diag/enable 0
+    write /sys/class/usb_composite/rndis/enable 0
+    write /sys/class/usb_composite/rmnet/enable 0
+    write /sys/class/usb_composite/modem/enable 0
+    write /sys/class/usb_composite/nmea/enable 0
+
+    # Refuerza la asignación de LUN para que el host no reciba un ISO vacío
+    write /sys/devices/platform/usb_mass_storage/lun0/file /dev/block/mmcblk0p1
+    write /sys/devices/platform/usb_mass_storage/lun0/ro 0
+    write /sys/devices/platform/usb_mass_storage/lun1/file ""
+    write /sys/devices/platform/usb_mass_storage/lun2/file ""
+
     start adbd
     setprop service.adb.root 1
 
@@ -98,13 +132,23 @@ service ueventd /sbin/ueventd
 service healthd /sbin/healthd -n
     critical
 
+#/* <DTS2011092902032 sunwenyong 20110929 begin */
+service charge	/sbin/charge
+#/* DTS2011092902032 sunwenyong 20110929 end> */
+
+#/* < DTS2011110702064 libeibei 20111110 begin */
 service recovery /sbin/recovery
+#/* DTS2011110702064 libeibei 20111110 end > */
 
 service adbd /sbin/adbd recovery
     socket adbd stream 660 system system
     class core
     seclabel u:r:adbd:s0
     disabled
+
+service charge /sbin/charge
+    class charger
+    oneshot
 
 # Always start adbd on userdebug and eng builds
 on property:ro.debuggable=1

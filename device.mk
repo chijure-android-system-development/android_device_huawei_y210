@@ -1,7 +1,9 @@
 # device.mk para TWRP minimal en Huawei Y210-0151
 
 PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/recovery.fstab:recovery/root/etc/recovery.fstab
+    $(LOCAL_PATH)/recovery.fstab:recovery/root/etc/recovery.fstab \
+    $(LOCAL_PATH)/ramdisk/recovery/sbin/charge:recovery/root/sbin/charge \
+    $(call find-copy-subdir-files,*,$(LOCAL_PATH)/ramdisk/recovery/res,recovery/root/res)
 
 PRODUCT_PACKAGES += adbd
 
