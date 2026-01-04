@@ -49,6 +49,8 @@ on boot
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/functions adb
     write /sys/class/android_usb/android0/enable 1
+    setprop sys.usb.config adb
+    setprop sys.usb.state adb
     start adbd
     setprop service.adb.root 1
 
@@ -99,8 +101,10 @@ service healthd /sbin/healthd -n
 service recovery /sbin/recovery
 
 service adbd /sbin/adbd recovery
-    disabled
     socket adbd stream 660 system system
+    class core
+    seclabel u:r:adbd:s0
+    disabled
 
 # Always start adbd on userdebug and eng builds
 on property:ro.debuggable=1

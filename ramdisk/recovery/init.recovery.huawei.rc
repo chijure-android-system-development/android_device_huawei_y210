@@ -16,8 +16,3 @@ on boot
     setprop ro.debuggable 1
     setprop persist.service.adb.enable 1
     setprop persist.sys.usb.config adb
-
-service adbd /sbin/adbd recovery
-    disabled
-    socket adbd stream 660 system system
-    seclabel u:r:adbd:s0
