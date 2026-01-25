@@ -6,3 +6,5 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := huawei_y210
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_PHONY_PACKAGE)
+
+include $(call all-makefiles-under,$(LOCAL_PATH))

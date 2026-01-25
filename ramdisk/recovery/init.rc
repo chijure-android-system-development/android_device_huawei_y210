@@ -139,6 +139,7 @@ service ueventd /sbin/ueventd
 
 #/* <DTS2011092902032 sunwenyong 20110929 begin */
 service charge	/sbin/charge
+    disabled
 #/* DTS2011092902032 sunwenyong 20110929 end> */
 service adbd /sbin/adbd recovery
     socket adbd stream 660 system system
@@ -158,7 +159,10 @@ on property:service.adb.root=1
     restart adbd
     write /sys/class/android_usb/android0/enable 1
 
+service offmode_check /sbin/offmode_check
+    oneshot
+
 #/* < DTS2011110702064 libeibei 20111110 begin */
-service recovery /sbin/sh /sbin/ncm.sh
-	oneshot
+service recovery /sbin/recovery
+    disabled
 #/* DTS2011110702064 libeibei 20111110 end > */
