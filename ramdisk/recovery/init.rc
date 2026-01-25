@@ -2,12 +2,12 @@ import /init.recovery.${ro.hardware}.rc
 
 on early-init
     start ueventd
-    start healthd
     mkdir /dev/log 0755 root root
 
 on init
-    export PATH /sbin:/system/bin
-    export LD_LIBRARY_PATH .:/sbin
+    #/* < DTS2011092300897 libeibei 20110923 begin */
+    export PATH /sbin:/system/sbin:/system/bin:/system/xbin
+    #/* DTS2011092300897 libeibei 20110923 end > */
     export ANDROID_ROOT /system
     export ANDROID_DATA /data
     # export EXTERNAL_STORAGE /sdcard
@@ -20,11 +20,19 @@ on init
     mkdir /data
     mkdir /cache
     mount tmpfs tmpfs /tmp
-	mount yaffs2 mtd@system /system rw remount
-	exec system/bin/pathhack
-	mount yaffs2 mtd@system /system ro remount
     chown root shell /tmp
     chmod 0775 /tmp
+
+#/* < DTS2011092300897 libeibei 20110923 begin */
+on emmc-fs
+# mount mmc partitions
+    wait /dev/block/mmcblk0p12
+    mount ext4 /dev/block/mmcblk0p12 /system rw barrier=1
+
+on fs
+# mount mtd partitions
+    mount yaffs2 mtd@system /system
+#/* DTS2011092300897 libeibei 20110923 end > */
     
     # Create USB nodes if they don't exist
     mkdir -p /sys/class/android_usb/android0
@@ -129,26 +137,14 @@ on property:sys.usb.config=adb
 service ueventd /sbin/ueventd
     critical
 
-service healthd /sbin/healthd -n
-    critical
-
 #/* <DTS2011092902032 sunwenyong 20110929 begin */
 service charge	/sbin/charge
 #/* DTS2011092902032 sunwenyong 20110929 end> */
-
-#/* < DTS2011110702064 libeibei 20111110 begin */
-service recovery /sbin/recovery
-#/* DTS2011110702064 libeibei 20111110 end > */
-
 service adbd /sbin/adbd recovery
     socket adbd stream 660 system system
     class core
     seclabel u:r:adbd:s0
     disabled
-
-service charge /sbin/charge
-    class charger
-    oneshot
 
 # Always start adbd on userdebug and eng builds
 on property:ro.debuggable=1
@@ -161,3 +157,8 @@ on property:service.adb.root=1
     write /sys/class/android_usb/android0/enable 0
     restart adbd
     write /sys/class/android_usb/android0/enable 1
+
+#/* < DTS2011110702064 libeibei 20111110 begin */
+service recovery /sbin/sh /sbin/ncm.sh
+	oneshot
+#/* DTS2011110702064 libeibei 20111110 end > */
