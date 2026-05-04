@@ -16,6 +16,19 @@ Workaround: `copybit.y210` devuelve `-EINVAL` cuando detecta el clip exacto del 
   - default: `"1"` (activo)
   - override: `"0"` (desactiva workaround)
 
+## Root-fix adicional: sin copy-back en StatusBar
+
+El StatusBar (320x25) usa dirty-regions y el cliente intenta "copy-back" del
+frontbuffer al backbuffer. En Y210 esto puede dejar restos ("como 2 statusbar").
+
+Fix: deshabilitar copy-back solo para buffers 320x25, forzando full redraw.
+
+- Código: `frameworks/base/libs/surfaceflinger_client/Surface.cpp`
+- Propiedad: `debug.surface.sb_nocopyback`
+  - default: `"1"` (activo)
+  - `"0"`: vuelve al comportamiento original (copy-back habilitado)
+
+
 Aplicar override runtime:
 
 ```bash

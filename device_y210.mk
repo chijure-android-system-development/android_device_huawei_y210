@@ -6,6 +6,7 @@ $(call inherit-product, device/common/gps/gps_us_supl.mk)
 # RIL disabled for now
 FRAMEWORKS_BASE_SUBDIRS += ../../$(LOCAL_PATH)/ril/
 
+USE_STOCK_COPYBIT_GRALLOC ?= true
 $(call inherit-product-if-exists, vendor/huawei/y210/y210-vendor.mk)
 
 DEVICE_PACKAGE_OVERLAYS += device/huawei/y210/overlay
@@ -17,9 +18,14 @@ PRODUCT_PACKAGES += \
     libOmxCore
 
 # Graphics
+ifeq ($(USE_STOCK_COPYBIT_GRALLOC),true)
+# Use the stock (vendor) MSM7K HALs, but install them under the y210 variant
+# name so hw_get_module() resolves them via ro.product.board=y210.
+else
 PRODUCT_PACKAGES += \
     gralloc.y210 \
     copybit.y210
+endif
 
 # Audio
 PRODUCT_PACKAGES += \

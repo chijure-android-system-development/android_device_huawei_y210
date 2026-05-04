@@ -18,13 +18,11 @@
 #define LOG_TAG "copybit"
 
 #include <cutils/log.h>
-#include <cutils/properties.h>
 
 #include "msm_mdp.h"
 #include <linux/fb.h>
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -127,96 +125,20 @@ static int get_format(int format) {
     case HAL_PIXEL_FORMAT_RGBA_8888:     return MDP_RGBA_8888;
     case HAL_PIXEL_FORMAT_BGRA_8888:     return MDP_BGRA_8888;
 //    case HAL_PIXEL_FORMAT_YCrCb_422_SP:  return MDP_Y_CBCR_H2V1;
-    // The Y210 blob claims NV21 (YCrCb_420_SP) but delivers NV12 (CbCr order).
-    // Match stock CM7 libcopybit: map NV21 HAL format -> MDP_Y_CBCR_H2V2 so the
-    // MDP reads the interleaved chroma plane as CbCr (NV12), matching the actual data.
     case HAL_PIXEL_FORMAT_YCrCb_420_SP:  return MDP_Y_CBCR_H2V2;
     case HAL_PIXEL_FORMAT_YCbCr_422_SP:  return MDP_Y_CRCB_H2V1;
-    // NV12 (YCbCr) -> CbCr interleaved (Cb in MSB).
-    case HAL_PIXEL_FORMAT_YCbCr_420_SP:  return MDP_Y_CBCR_H2V2;
+//    case HAL_PIXEL_FORMAT_YCbCr_420_SP:  return MDP_Y_CRCB_H2V2;
     }
     return -1;
-}
-
-copybit_image_t const* convertYV12toYCrCb420SP(copybit_image_t const* rhs)
-{
-    static copybit_image_t converted;
-
-    if (!rhs || rhs->format != HAL_PIXEL_FORMAT_YV12) {
-        return rhs;
-    }
-
-    private_handle_t* hnd = private_handle_t::dynamicCast(rhs->handle);
-    if (!hnd) {
-        LOGE("cbq: Invalid handle");
-        return NULL;
-    }
-
-    uint8_t* base = (uint8_t*) rhs->base;
-    if (!base && hnd->base) {
-        base = (uint8_t*)(hnd->base + hnd->offset);
-    }
-    if (!base) {
-        LOGE("cbq: Error copybit conversion from yv12 failed (null base)");
-        return NULL;
-    }
-
-    const uint32_t stride = (rhs->w + 15) & ~15;
-    const uint32_t c_stride = ((stride / 2) + 15) & ~15;
-    const uint32_t y_size = stride * rhs->h;
-    const uint32_t c_size = c_stride * (rhs->h / 2);
-    const uint32_t temp_size = c_size * 2;
-
-    uint8_t* tmp = (uint8_t*)malloc(temp_size);
-    if (!tmp) {
-        LOGE("cbq: Failed to allocate temporary buffer");
-        return NULL;
-    }
-
-    uint8_t* cr = base + y_size;
-    uint8_t* cb = cr + c_size;
-    uint8_t* dst = tmp;
-
-    for (uint32_t y = 0; y < (rhs->h / 2); y++) {
-        uint8_t* cr_row = cr + (y * c_stride);
-        uint8_t* cb_row = cb + (y * c_stride);
-        for (uint32_t x = 0; x < c_stride; x++) {
-            *dst++ = cr_row[x];
-            *dst++ = cb_row[x];
-        }
-    }
-
-    memcpy(base + y_size, tmp, temp_size);
-    free(tmp);
-
-    converted = *rhs;
-    converted.format = HAL_PIXEL_FORMAT_YCrCb_420_SP;
-
-    return &converted;
 }
 
 /** convert from copybit image to mdp image structure */
 static void set_image(struct mdp_img *img, const struct copybit_image_t *rhs) 
 {
-    rhs = convertYV12toYCrCb420SP(rhs);
-    if (!rhs) {
-        memset(img, 0, sizeof(*img));
-        img->format = (uint32_t)-1;
-        return;
-    }
-
-    private_handle_t* hnd = private_handle_t::dynamicCast(rhs->handle);
-    if (!hnd) {
-        LOGE("cbq: Invalid handle");
-        memset(img, 0, sizeof(*img));
-        img->format = (uint32_t)-1;
-        return;
-    }
-
-    int mdp_format = get_format(rhs->format);
+    private_handle_t* hnd = (private_handle_t*)rhs->handle;
     img->width      = rhs->w;
     img->height     = rhs->h;
-    img->format     = mdp_format;
+    img->format     = get_format(rhs->format);
     img->offset     = hnd->offset;
     #if defined(COPYBIT_MSM7K)
         #if defined(USE_ASHMEM) && (TARGET_7x27)
@@ -431,34 +353,12 @@ static int stretch_copybit(
         struct copybit_image_t const *src,
         struct copybit_rect_t const *dst_rect,
         struct copybit_rect_t const *src_rect,
-        struct copybit_region_t const *region)
+        struct copybit_region_t const *region) 
 {
     struct copybit_context_t* ctx = (struct copybit_context_t*)dev;
     int status = 0;
 
     if (ctx) {
-        // Y210: evitar MDP/copybit para el strip del StatusBar (320x25 en top),
-        // ya que en este dispositivo se observa "ghosting/sobreposición".
-        // Fallback: SurfaceFlinger usará el compositor software para ese frame.
-        char prop[PROPERTY_VALUE_MAX];
-        property_get("debug.copybit.disable_statusbar", prop, "1");
-        const bool disable_statusbar = (prop[0] != '0');
-
-        // MDP3 on MSM7225A produces horizontal-line artifacts when blitting RGB
-        // sources because libagl may pass pixel-width != buffer-stride for small
-        // surfaces (icons, widgets), causing MDP to compute wrong row offsets.
-        // Restrict to YUV-only: video/camera benefit from HW; UI RGB falls back
-        // to pixelflinger which handles stride correctly.
-        switch (src->format) {
-            case HAL_PIXEL_FORMAT_YCrCb_420_SP:
-            case HAL_PIXEL_FORMAT_YCbCr_422_SP:
-            case HAL_PIXEL_FORMAT_YCbCr_420_SP:
-            case HAL_PIXEL_FORMAT_YV12:
-                break;
-            default:
-                return -EINVAL;
-        }
-
         struct {
             uint32_t count;
             struct mdp_blit_req req[12];
@@ -492,25 +392,15 @@ static int stretch_copybit(
         struct copybit_rect_t clip;
         list.count = 0;
         status = 0;
+
         while ((status == 0) && region->next(region, &clip)) {
             intersect(&clip, &bounds, &clip);
-
-            if (disable_statusbar &&
-                clip.l == 0 && clip.t == 0 &&
-                clip.r == dst->w && clip.b == 25) {
-                return -EINVAL;
-            }
-
             mdp_blit_req* req = &list.req[list.count];
             int flags = 0;
 
             set_infos(ctx, req, flags);
             set_image(&req->dst, dst);
             set_image(&req->src, src);
-            if ((int)req->dst.format < 0 || (int)req->src.format < 0) {
-                LOGE("cbq: Error copybit conversion from yv12 failed");
-                return -EINVAL;
-            }
             set_rects(ctx, req, dst_rect, src_rect, &clip, 0);//src->padding);
 
             if (req->src_rect.w<=0 || req->src_rect.h<=0)
@@ -566,6 +456,8 @@ static int open_copybit(const struct hw_module_t* module, const char* name,
     copybit_context_t *ctx;
     ctx = (copybit_context_t *)malloc(sizeof(copybit_context_t));
     memset(ctx, 0, sizeof(*ctx));
+
+    LOGE("copybit open (y210)");
 
     ctx->device.common.tag = HARDWARE_DEVICE_TAG;
     ctx->device.common.version = 1;

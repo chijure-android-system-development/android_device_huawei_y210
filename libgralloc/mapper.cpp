@@ -26,10 +26,10 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <linux/ashmem.h>
+
 #include <cutils/log.h>
 #include <cutils/atomic.h>
 #include <cutils/ashmem.h>
-#include <cutils/properties.h>
 
 #include <hardware/hardware.h>
 #include <hardware/gralloc.h>
@@ -41,7 +41,6 @@
 
 // we need this for now because pmem cannot mmap at an offset
 #define PMEM_HACK   1
-#define ASHMEM_CACHE_CLEAN_RANGE        _IO(__ASHMEMIOC, 12)
 
 /* desktop Linux needs a little help with gettid() */
 #if defined(ARCH_X86) && !defined(HAVE_ANDROID_OS)
@@ -51,58 +50,12 @@ pid_t gettid() { return syscall(__NR_gettid);}
 #undef __KERNEL__
 #endif
 
+#define ASHMEM_CACHE_CLEAN_RANGE        _IO(__ASHMEMIOC, 12)
 #define GRALLOC_MODULE_PERFORM_DECIDE_PUSH_BUFFER_HANDLING 0x080000002
 
 // End of CAF values
 
 /*****************************************************************************/
-
-static int detect_pmem_private_flags_from_fd(int fd)
-{
-    char fd_path[64];
-    char target[PATH_MAX];
-    snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
-    ssize_t len = readlink(fd_path, target, sizeof(target) - 1);
-    if (len < 0) {
-        return private_handle_t::PRIV_FLAGS_USES_PMEM;
-    }
-    target[len] = '\0';
-    if (!strcmp(target, "/dev/pmem_adsp")) {
-        return private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP;
-    }
-    return private_handle_t::PRIV_FLAGS_USES_PMEM;
-}
-
-/*****************************************************************************/
-
-static int sync_pmem_buffer(private_handle_t* hnd)
-{
-    if (hnd == NULL ||
-            !((hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM) ||
-              (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP))) {
-        return 0;
-    }
-
-    const char* memType =
-            (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP) ?
-            "pmem_adsp" : "pmem";
-    struct pmem_addr pmem_addr;
-    pmem_addr.vaddr = hnd->base;
-    pmem_addr.offset = hnd->offset;
-    pmem_addr.length = hnd->size;
-    int err = ioctl(hnd->fd, PMEM_CLEAN_CACHES, &pmem_addr);
-    if (err < 0 && (errno == ENOTTY || errno == EINVAL)) {
-        struct pmem_region region;
-        region.offset = hnd->offset;
-        region.len = hnd->size;
-        err = ioctl(hnd->fd, PMEM_CACHE_FLUSH, &region);
-    }
-    if (err < 0) {
-        LOGE("flush failed type=%s fd=%d offset=%d size=%d err=%d",
-             memType, hnd->fd, hnd->offset, hnd->size, err);
-    }
-    return err;
-}
 
 static int gralloc_map(gralloc_module_t const* module,
         buffer_handle_t handle,
@@ -232,7 +185,6 @@ int terminateBuffer(gralloc_module_t const* module,
     if (hnd->lockState & private_handle_t::LOCK_STATE_MAPPED) {
         // this buffer was mapped, unmap it now
         if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM ||
-            hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP ||
             hnd->flags & private_handle_t::PRIV_FLAGS_USES_ASHMEM) {
             if (hnd->pid != getpid()) {
                 // ... unless it's a "master" pmem buffer, that is a buffer
@@ -297,9 +249,10 @@ int gralloc_lock(gralloc_module_t const* module,
         hnd->writeOwner = gettid();
     }
 
-    // If requesting SW write for non-framebuffer handles, flag for flushing
-    // at unlock. This matches legacy msm7x27 gralloc behavior (pmem/ashmem).
-    if ((usage & (GRALLOC_USAGE_SW_WRITE_MASK | GRALLOC_USAGE_HW_RENDER)) &&
+    // if requesting sw write for non-framebuffer handles, flag for
+    // flushing at unlock
+
+    if ((usage & GRALLOC_USAGE_SW_WRITE_MASK) &&
             !(hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER)) {
         hnd->flags |= private_handle_t::PRIV_FLAGS_NEEDS_FLUSH;
     }
@@ -335,23 +288,19 @@ int gralloc_unlock(gralloc_module_t const* module,
 
     if (hnd->flags & private_handle_t::PRIV_FLAGS_NEEDS_FLUSH) {
         int err;
-        if ((hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM) ||
-                (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM_ADSP)) {
-            err = sync_pmem_buffer(hnd);
-        } else if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_ASHMEM) {
+        if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM) {
+            struct pmem_addr pmem_addr;
+            pmem_addr.vaddr = hnd->base;
+            pmem_addr.offset = hnd->offset;
+            pmem_addr.length = hnd->size;
+            err = ioctl( hnd->fd, PMEM_CLEAN_CACHES,  &pmem_addr);
+        } else if ((hnd->flags & private_handle_t::PRIV_FLAGS_USES_ASHMEM)) {
+            unsigned long addr = hnd->base + hnd->offset;
             err = ioctl(hnd->fd, ASHMEM_CACHE_CLEAN_RANGE, NULL);
-        } else {
-            err = 0;
-        }
+        }         
 
         LOGE_IF(err < 0, "cannot flush handle %p (offs=%x len=%x)\n",
                 hnd, hnd->offset, hnd->size);
-        char dbg[PROPERTY_VALUE_MAX];
-        property_get("debug.gralloc.flushlog", dbg, "0");
-        if (dbg[0] == '1' && hnd->size <= (64*1024)) {
-            LOGE("gralloc: flush size=%d flags=0x%x fd=%d err=%d",
-                 hnd->size, hnd->flags, hnd->fd, err);
-        }
         hnd->flags &= ~private_handle_t::PRIV_FLAGS_NEEDS_FLUSH;
     }
 
@@ -403,12 +352,11 @@ int gralloc_perform(struct gralloc_module_t const* module,
             }
 
             native_handle_t** handle = va_arg(args, native_handle_t**);
-            int inferred_flags = detect_pmem_private_flags_from_fd(fd);
             private_handle_t* hnd = (private_handle_t*)native_handle_create(
                     private_handle_t::sNumFds, private_handle_t::sNumInts);
             hnd->magic = private_handle_t::sMagic;
             hnd->fd = fd;
-            hnd->flags = inferred_flags;
+            hnd->flags = private_handle_t::PRIV_FLAGS_USES_PMEM;
             hnd->size = size;
             hnd->offset = offset;
             hnd->base = intptr_t(base) + offset;
@@ -428,6 +376,8 @@ int gralloc_perform(struct gralloc_module_t const* module,
             int *useBufferDirectly = va_arg(args, int*);
             size_t *size = va_arg(args, size_t*);
             *size = calculateBufferSize(width, height, format);
+            int conversion = 0;
+            int direct = 0;
             res = decideBufferHandlingMechanism(format, compositionUsed, hasBlitEngine,
                                                 needConversion, useBufferDirectly);
 		    break;

@@ -118,25 +118,13 @@ static int fb_setUpdateRect(struct framebuffer_device_t* dev,
 {
     if (((w|h) <= 0) || ((l|t)<0))
         return -EINVAL;
-
+        
     fb_context_t* ctx = (fb_context_t*)dev;
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
     m->info.reserved[0] = 0x54445055; // "UPDT";
     m->info.reserved[1] = (uint16_t)l | ((uint32_t)t << 16);
     m->info.reserved[2] = (uint16_t)(l+w) | ((uint32_t)(t+h) << 16);
-    return 0;
-}
-
-// No-op variant: non-NULL pointer makes FramebufferNativeWindow::isUpdateOnDemand()
-// return true, which sets DisplayHardware::PARTIAL_UPDATES and clears SWAP_RECTANGLE.
-// Without this, Adreno 200 EGL advertises EGL_ANDROID_swap_rectangle and SF sets
-// SWAP_RECTANGLE instead — causing partial dirty-region redraws over uninitialized
-// back-buffer content (the "ghosting" corruption on Y210).
-// Does NOT write reserved[0]="UPDT" to avoid triggering the MSM kernel partial-scan path.
-static int fb_setUpdateRect_noop(struct framebuffer_device_t* /*dev*/,
-        int /*l*/, int /*t*/, int /*w*/, int /*h*/)
-{
     return 0;
 }
 
@@ -149,8 +137,8 @@ static void *disp_loop(void *ptr)
     while (1) {
         pthread_mutex_lock(&(m->qlock));
 
-        // Wait until a real buffer is queued. pthread condvars may wake spuriously.
-        while (m->disp.isEmpty()) {
+        // wait (sleep) while display queue is empty;
+        if (m->disp.isEmpty()) {
             pthread_cond_wait(&(m->qpost),&(m->qlock));
         }
 
@@ -165,6 +153,7 @@ static void *disp_loop(void *ptr)
         const size_t offset = hnd->base - m->framebuffer->base;
         m->info.activate = FB_ACTIVATE_VBL;
         m->info.yoffset = offset / m->finfo.line_length;
+
 #if defined(HDMI_DUAL_DISPLAY)
         pthread_mutex_lock(&m->overlayLock);
         m->orientation = neworientation;
@@ -175,11 +164,18 @@ static void *disp_loop(void *ptr)
         if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
             LOGE("ERROR FBIOPUT_VSCREENINFO failed; frame not displayed");
         }
-        if (cur_buf != -1) {
+
+        if (cur_buf == -1) {
+            pthread_mutex_lock(&(m->avail[nxtBuf.idx].lock));
+            m->avail[nxtBuf.idx].is_avail = true;
+            pthread_cond_signal(&(m->avail[nxtBuf.idx].cond));
+            pthread_mutex_unlock(&(m->avail[nxtBuf.idx].lock));
+        } else {
             pthread_mutex_lock(&(m->avail[cur_buf].lock));
             m->avail[cur_buf].is_avail = true;
             pthread_cond_signal(&(m->avail[cur_buf].cond));
             pthread_mutex_unlock(&(m->avail[cur_buf].lock));
+
         }
         cur_buf = nxtBuf.idx;
     }
@@ -389,10 +385,11 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     private_handle_t const* hnd = reinterpret_cast<private_handle_t const*>(buffer);
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
-    nxtIdx = (m->currentIdx + 1) % NUM_BUFFERS;
+
     if (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) {
 
         reuse = false;
+        nxtIdx = (m->currentIdx + 1) % NUM_BUFFERS;
 
         if (m->swapInterval == 0) {
             // if SwapInterval = 0 and no buffers available then reuse
@@ -416,6 +413,7 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
             pthread_mutex_lock(&(m->avail[nxtIdx].lock));
             m->avail[nxtIdx].is_avail = false;
             pthread_mutex_unlock(&(m->avail[nxtIdx].lock));
+
             qb.idx = nxtIdx;
             qb.buf = buffer;
             pthread_mutex_lock(&(m->qlock));
@@ -462,7 +460,13 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
                 0, 0, m->info.xres, m->info.yres,
                 &buffer_vaddr);
 
-        memcpy(fb_vaddr, buffer_vaddr, m->finfo.line_length * m->info.yres);
+        //memcpy(fb_vaddr, buffer_vaddr, m->finfo.line_length * m->info.yres);
+
+        msm_copy_buffer(
+                m->framebuffer, m->framebuffer->fd,
+                m->info.xres, m->info.yres, m->fbFormat,
+                m->info.xoffset, m->info.yoffset,
+                m->info.width, m->info.height);
 
         m->base.unlock(&m->base, buffer); 
         m->base.unlock(&m->base, m->framebuffer); 
@@ -567,7 +571,7 @@ int mapFrameBufferLocked(struct private_module_t* module)
 	module->fbFormat = HAL_PIXEL_FORMAT_RGB_565;
     }
     /*
-     * Request NUM_BUFFERS screens (at least 2 for page flipping).
+     * Request NUM_BUFFERS screens (at lest 2 for page flipping)
      */
     info.yres_virtual = info.yres * NUM_BUFFERS;
 
@@ -659,8 +663,16 @@ int mapFrameBufferLocked(struct private_module_t* module)
     module->fps = fps;
 
 #ifdef NO_SURFACEFLINGER_SWAPINTERVAL
-    // Keep page-flip pacing conservative and predictable on this panel.
-    module->swapInterval = 1;
+    char pval[PROPERTY_VALUE_MAX];
+    property_get("debug.gr.swapinterval", pval, "1");
+    module->swapInterval = atoi(pval);
+    if (module->swapInterval < private_module_t::PRIV_MIN_SWAP_INTERVAL ||
+        module->swapInterval > private_module_t::PRIV_MAX_SWAP_INTERVAL) {
+        module->swapInterval = 1;
+        LOGW("Out of range (%d to %d) value for debug.gr.swapinterval, using 1",
+             private_module_t::PRIV_MIN_SWAP_INTERVAL,
+             private_module_t::PRIV_MAX_SWAP_INTERVAL);
+    }
 
 #else
     /* when surfaceflinger supports swapInterval then can just do this */
@@ -674,16 +686,22 @@ int mapFrameBufferLocked(struct private_module_t* module)
         pthread_mutex_init(&(module->avail[i].lock), NULL);
         pthread_cond_init(&(module->avail[i].cond), NULL);
         module->avail[i].is_avail = true;
+    }    
+
+    /* create display update thread */
+    pthread_t thread1;
+    if (pthread_create(&thread1, NULL, &disp_loop, (void *) module)) {
+         return -errno;
     }
 
     /*
-     * map the framebuffer before the display thread can consume queued buffers.
+     * map the framebuffer
      */
+
     int err;
     size_t fbSize = roundUpToPageSize(finfo.line_length * info.yres_virtual);
     module->framebuffer = new private_handle_t(dup(fd), fbSize,
-            private_handle_t::PRIV_FLAGS_USES_PMEM |
-            private_handle_t::PRIV_FLAGS_FRAMEBUFFER);
+            private_handle_t::PRIV_FLAGS_USES_PMEM);
 
     module->numBuffers = info.yres_virtual / info.yres;
     module->bufferMask = 0;
@@ -695,12 +713,6 @@ int mapFrameBufferLocked(struct private_module_t* module)
     }
     module->framebuffer->base = intptr_t(vaddr);
     memset(vaddr, 0, fbSize);
-
-    /* create display update thread */
-    pthread_t thread1;
-    if (pthread_create(&thread1, NULL, &disp_loop, (void *) module)) {
-         return -errno;
-    }
 
 #if defined(HDMI_DUAL_DISPLAY)
     /* Overlay for HDMI*/
@@ -789,12 +801,11 @@ int fb_device_open(hw_module_t const* module, const char* name,
             const_cast<int&>(dev->device.minSwapInterval) = private_module_t::PRIV_MIN_SWAP_INTERVAL;
             const_cast<int&>(dev->device.maxSwapInterval) = private_module_t::PRIV_MAX_SWAP_INTERVAL;
 
-            // Use a no-op setUpdateRect so isUpdateOnDemand() returns true.
-            // This sets PARTIAL_UPDATES in DisplayHardware, which clears SWAP_RECTANGLE,
-            // forcing SurfaceFlinger to do full-screen redraws every frame.
-            // Using a NULL pointer here leaves SWAP_RECTANGLE active (Adreno EGL
-            // advertises EGL_ANDROID_swap_rectangle), causing the ghosting corruption.
-            dev->device.setUpdateRect = fb_setUpdateRect_noop;
+            if (m->finfo.reserved[0] == 0x5444 &&
+                    m->finfo.reserved[1] == 0x5055) {
+                dev->device.setUpdateRect = fb_setUpdateRect;
+                LOGD("UPDATE_ON_DEMAND supported");
+            }
 
             *device = &dev->device.common;
         }

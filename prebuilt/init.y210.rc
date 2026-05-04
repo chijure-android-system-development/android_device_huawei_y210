@@ -88,12 +88,6 @@ on post-fs
     chown system system /sys/devices/platform/msm_sdcc.3/polling
     chown system system /sys/devices/platform/msm_sdcc.4/polling
 
-#/* < DTS2011082001050  liujinggang 20110822 begin */
-#/* we change the following lines to change the light and  proximity mode to pass the AT&T test
-    chmod 0664 /dev/light
-    chmod 0664 /dev/proximity
-#/* DTS2011082001050  liujinggang 20110822 end > */
-
 # <DTS2011092706493 hufeng 20110927 begin
 # /*
 #  * default apanic extend function is closed

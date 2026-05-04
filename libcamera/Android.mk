@@ -17,7 +17,8 @@ LOCAL_SHARED_LIBRARIES := \
     libcamera_client \
     libui \
     libbinder \
-    libdl
+    libdl \
+    libsurfaceflinger_client
 LOCAL_SRC_FILES := Y210CameraWrapper.cpp
 
 include $(BUILD_SHARED_LIBRARY)

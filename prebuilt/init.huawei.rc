@@ -113,15 +113,6 @@ on boot
     #/* DTS2011121504967 wanghao 20111215 end > */
     #/* DTS2011122402005 wanghao 20111224 end > */
 
-    # Match stock sensor node permissions after the driver creates them.
-    wait /dev/accel
-    chmod 0664 /dev/accel
-    chown system system /dev/accel
-    wait /dev/light
-    chmod 0664 /dev/light
-    wait /dev/proximity
-    chmod 0664 /dev/proximity
-
     # FM radio device nodes: keep world-accessible like stock/ueventd rules.
     # Some boots still create them with restrictive perms; fix up here.
     wait /dev/radio0
@@ -129,8 +120,11 @@ on boot
     wait /dev/msm_fm
     chmod 0666 /dev/msm_fm
 
-    # ueventd now owns the KGSL permissions; keep only the legacy /dev/kgsl symlink here.
+    # KGSL permissions: ensure SurfaceFlinger can open Adreno (otherwise it
+    # falls back to PixelFlinger software rendering and ghosting appears).
     wait /dev/kgsl-3d0
+    chown root graphics /dev/kgsl-3d0
+    chmod 0660 /dev/kgsl-3d0
     symlink /dev/kgsl-3d0 /dev/kgsl
 
     # RIL device permissions (match stock expectations)

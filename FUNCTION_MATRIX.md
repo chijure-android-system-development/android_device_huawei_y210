@@ -37,7 +37,7 @@ Actualizar esta tabla cada vez que un bug se cierre con evidencia.
 - Boot completo hasta launcher: **OK**
 - `system_server` estable: **OK**
 - `surfaceflinger` estable: **OK**
-- `mediaserver` estable: **OK** (con cámara aún en investigación)
+- `mediaserver` estable: **OK**
 - `adb` (USB debugging): **OK**
 - `adb logcat` persistente tras reboot: **OK** (ver `device/huawei/y210/LOGGING_NOTES.md`)
 
@@ -117,9 +117,9 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 ### Cámara
 
 - App cámara abre: **OK** (ver `device/huawei/y210/CAMERA_NOTES.md`)
-- Preview primera apertura: **Parcial** (estable, pero orientación/rotación aún por confirmar)
-- `close -> reopen`: **No**
-- Captura de foto: **No**
+- Preview `640x480`: **OK** (orientación forzada a 0 en `HAL_getCameraInfo`)
+- Captura de foto: **OK** (SHUTTER + RAW_IMAGE 294912 B + COMPRESSED_IMAGE ~55 KB JPEG)
+- `close → reopen`: **OK** (fix vtable slot 26 en `release()`)
 - Video: **Pendiente**
 
 ### Almacenamiento / USB
