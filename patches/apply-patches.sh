@@ -27,9 +27,6 @@ copy_new() {
 
 echo "=== Y210 patches ==="
 
-# android manifest — hardware/ti/wpan apunta a ChameleonOS (fork compatible)
-apply android                         android_manifest.patch
-
 # hardware/ril — libril: RIL_setRilSocketName stub, sanitizeRilString,
 #                         version negotiation flexible, unsol 1031-1037
 apply hardware/ril                    hardware_ril.patch

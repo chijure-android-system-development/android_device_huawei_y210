@@ -46,6 +46,7 @@ BOARD_CUSTOM_GRAPHICS           := ../../../device/huawei/y210/recovery/graphics
 # OpenGL drivers config file path
 BOARD_EGL_CFG := device/huawei/y210/prebuilt/system/lib/egl/egl.cfg
 BOARD_USES_QCOM_HARDWARE := true
+BOARD_USE_QCOM_PMEM := true
 COMMON_GLOBAL_CFLAGS += -DQCOM_HARDWARE
 BOARD_USES_QCOM_LIBRPC := true
 BOARD_USES_QCOM_LIBS := true

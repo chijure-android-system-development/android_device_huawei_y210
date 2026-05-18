@@ -137,7 +137,10 @@ static bool isDelegatableParameterKey(const char* key)
             !strcmp(key, CameraParameters::KEY_PREVIEW_FORMAT) ||
             !strcmp(key, CameraParameters::KEY_PICTURE_FORMAT) ||
             !strcmp(key, CameraParameters::KEY_JPEG_QUALITY) ||
-            !strcmp(key, CameraParameters::KEY_ROTATION);
+            !strcmp(key, CameraParameters::KEY_ROTATION) ||
+            !strcmp(key, CameraParameters::KEY_VIDEO_SIZE) ||
+            !strcmp(key, CameraParameters::KEY_VIDEO_FRAME_FORMAT) ||
+            !strcmp(key, "recording-hint");
 }
 
 wp<CameraHardwareInterface> Y210CameraWrapper::sSingleton;
@@ -371,6 +374,11 @@ CameraParameters Y210CameraWrapper::seedParameters() const
             CameraParameters::ANTIBANDING_AUTO);
     params.set(CameraParameters::KEY_SUPPORTED_FOCUS_MODES,
             CameraParameters::FOCUS_MODE_AUTO);
+    params.setVideoSize(352, 288);
+    params.set(CameraParameters::KEY_VIDEO_FRAME_FORMAT,
+            CameraParameters::PIXEL_FORMAT_YUV420SP);
+    params.set("supported-video-sizes", "352x288,320x240,176x144");
+    params.set("preferred-preview-size-for-video", "352x288");
     return params;
 }
 
@@ -449,6 +457,9 @@ CameraParameters Y210CameraWrapper::sanitizeParameters(
     copyParameterIfPresent(&safe, *raw,
             CameraParameters::KEY_ZOOM_SUPPORTED);
     copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_VIDEO_SIZE);
+    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_VIDEO_FRAME_FORMAT);
+    copyParameterIfPresent(&safe, *raw, "supported-video-sizes");
+    copyParameterIfPresent(&safe, *raw, "preferred-preview-size-for-video");
 
     return safe;
 }
@@ -471,6 +482,9 @@ CameraParameters Y210CameraWrapper::buildDelegatedParameters(
         CameraParameters::KEY_ROTATION,
         CameraParameters::KEY_WHITE_BALANCE,
         CameraParameters::KEY_FOCUS_MODE,
+        CameraParameters::KEY_VIDEO_SIZE,
+        CameraParameters::KEY_VIDEO_FRAME_FORMAT,
+        "recording-hint",
     };
 
     for (size_t i = 0; i < sizeof(kKeys) / sizeof(kKeys[0]); ++i) {
@@ -526,7 +540,16 @@ bool Y210CameraWrapper::isUsable() const
 
 sp<IMemoryHeap> Y210CameraWrapper::getPreviewHeap() const
 {
-    return isUsable() ? mLibInterface->getPreviewHeap() : NULL;
+    if (!isUsable()) return NULL;
+    sp<IMemoryHeap> heap = mLibInterface->getPreviewHeap();
+    if (heap == NULL) {
+        LOGE("Y210WRAP: getPreviewHeap returns NULL");
+    } else {
+        LOGI("Y210WRAP: getPreviewHeap heap=%p fd=%d size=%u",
+                heap.get(), heap->getHeapID(),
+                static_cast<unsigned>(heap->getSize()));
+    }
+    return heap;
 }
 
 sp<IMemoryHeap> Y210CameraWrapper::getRawHeap() const
@@ -661,15 +684,23 @@ bool Y210CameraWrapper::previewEnabled()
 status_t Y210CameraWrapper::startRecording()
 {
     if (!isUsable()) {
+        LOGE("Y210WRAP: startRecording unusable");
         return INVALID_OPERATION;
     }
-
+    CameraParameters params = getParameters();
+    int vw = 0, vh = 0;
+    params.getVideoSize(&vw, &vh);
+    const char* vfmt = params.get(CameraParameters::KEY_VIDEO_FRAME_FORMAT);
+    const char* hint = params.get("recording-hint");
+    LOGI("Y210WRAP: startRecording enter wrapper=%p iface=%p video=%dx%d vfmt=%s hint=%s preview=%d",
+            this, mLibInterface.get(), vw, vh,
+            vfmt ? vfmt : "(null)", hint ? hint : "(null)",
+            mPreviewRunning);
     status_t rc = mLibInterface->startRecording();
     if (rc == NO_ERROR) {
         mRecordingRunning = true;
     }
-    LOGI("Y210WRAP: startRecording rc=%d recordingRunning=%d",
-            rc, mRecordingRunning);
+    LOGI("Y210WRAP: startRecording exit rc=%d recordingRunning=%d", rc, mRecordingRunning);
     return rc;
 }
 
@@ -678,6 +709,8 @@ void Y210CameraWrapper::stopRecording()
     if (!isUsable()) {
         return;
     }
+    LOGI("Y210WRAP: stopRecording enter wrapper=%p iface=%p recordingRunning=%d",
+            this, mLibInterface.get(), mRecordingRunning);
     mLibInterface->stopRecording();
     mRecordingRunning = false;
     LOGI("Y210WRAP: stopRecording done");
@@ -766,7 +799,6 @@ status_t Y210CameraWrapper::setParameters(const CameraParameters& params)
         CameraParameters::KEY_EXPOSURE_COMPENSATION,
         CameraParameters::KEY_WHITE_BALANCE,
         CameraParameters::KEY_PREVIEW_FPS_RANGE,
-        "recording-hint",
         "focus-areas",
         "metering-areas",
     };
