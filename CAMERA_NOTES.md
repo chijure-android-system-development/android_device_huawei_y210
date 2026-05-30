@@ -1,11 +1,11 @@
 # Camera Notes — Huawei Y210
 
-## Estado (2026-05-03) — ESTABLE
+## Estado (2026-05-30) — ESTABLE
 
 Todo el ciclo básico de cámara funciona en dispositivo:
 
 - App Cámara abre — OK
-- Preview `640x480` estable — OK
+- Preview `640x480` en color, orientación portrait correcta — OK
 - Captura de foto — OK: SHUTTER + RAW_IMAGE (294912 B) + COMPRESSED_IMAGE (~55 KB JPEG)
 - Preview se reinicia automáticamente tras la foto — OK
 - `close → reopen` — OK: `release()` llama blob slot 26; nuevo `open` crea instancia fresca
@@ -84,25 +84,54 @@ fn(mLibInterface.get());
 
 ### Orientación de preview
 
-Tras el fix de `ro.build.product`, el blob devuelve `sensor_mount_angle=90`
-en `getCameraInfo()`, lo que el stack CM7 aplica como rotación de preview.
-Se fuerza `orientation=0` en `HAL_getCameraInfo()`:
+El sensor está montado físicamente a 90° (sensor landscape en teléfono portrait).
+Se fuerza `orientation=90` en `HAL_getCameraInfo()` para que la app de cámara
+rote el preview correctamente:
 
 ```cpp
 if (cameraInfo) {
-    cameraInfo->orientation = 0;
+    cameraInfo->orientation = 90;
 }
 ```
+
+## Pipeline de display del preview
+
+El blob produce frames NV21 (`HAL_PIXEL_FORMAT_YCrCb_420_SP`, format 17).
+El path de overlay está deshabilitado (el blob crasheaba al probar metadatos de
+overlay en algunos ciclos de vida). SurfaceFlinger usa el path GL de software.
+
+**Dos fixes necesarios en `hardware/msm7k/libcopybit/copybit.cpp`:**
+
+1. `set_image(&req->src)` debe llamarse **antes** de `set_infos()` para que la
+   detección YUV en `set_infos` lea `req->src.format` ya inicializado.
+2. `set_infos()` suprime `MDP_DITHER` para fuentes YUV — el driver msm7x27
+   devuelve `EINVAL` de `MSMFB_BLIT` si ese flag está presente con fuente YUV.
+
+El copybit sigue fallando (los buffers de preview son de `pmem_adsp`, dominio
+del ISP; `MSMFB_BLIT` solo acepta `pmem` del dominio display). El path GL es
+el camino correcto para este hardware sin overlay.
+
+**Fix en `frameworks/base/services/surfaceflinger/TextureManager.cpp`:**
+
+- `isSupportedYuvFormat()` incluye `HAL_PIXEL_FORMAT_YCrCb_420_SP`.
+- En `loadTexture()`, NV21 se convierte a RGB565 por software (BT.601) antes
+  de subirlo como textura GL. La conversión procesa ~307 K píx/frame a ~7 fps
+  (~30 ms/frame en Cortex-A5 a 600 MHz).
 
 ## Notas de build
 
 ```bash
-# Compilar el wrapper
-mmm device/huawei/y210/libcamera
+# Wrapper (orientación)
+make -j$(nproc) libcamera
 
-# Push
+# Pipeline de display
+make -j$(nproc) libsurfaceflinger copybit.msm7k
+
+# Push todo
 adb remount
 adb push out/target/product/y210/system/lib/libcamera.so /system/lib/
+adb push out/target/product/y210/system/lib/libsurfaceflinger.so /system/lib/
+adb push out/target/product/y210/system/lib/hw/copybit.msm7k.so /system/lib/hw/
 adb shell sync && adb reboot
 ```
 

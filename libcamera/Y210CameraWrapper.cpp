@@ -8,14 +8,23 @@
 
 #include <assert.h>
 #include <dlfcn.h>
+#include <string.h>
 
 #include <cutils/properties.h>
 #include <utils/Log.h>
+#include <camera/CameraParameters.h>
 #include <surfaceflinger/ISurface.h>
 
 #include "Y210CameraWrapper.h"
 
 namespace android {
+
+// Some Huawei/Qualcomm camera blobs reference non-AOSP static CameraParameters
+// symbols. Export the minimum set the Y210 blob needs so dlopen() succeeds even
+// if libcamera_client was built with --gc-sections and drops unused statics.
+const char CameraParameters::VIDEO_HFR_OFF[] = "off";
+static const void* const kForceExportVideoHfrOff __attribute__((used)) =
+        CameraParameters::VIDEO_HFR_OFF;
 
 typedef sp<CameraHardwareInterface> (*OpenCamFunc)(int, int);
 typedef void (*GetCamInfoFunc)(int, struct CameraInfo*);
@@ -184,9 +193,9 @@ static void ensureY210CameraLibOpened()
         // guarantee getCameraInfo is called before the first HAL_openCameraHardware,
         // so we prime it here to avoid the "Unable to determine target type" failure.
         struct CameraInfo info;
+        memset(&info, 0, sizeof(info));
         gGetCameraInfo(0, &info);
-        LOGI("Target type primed via getCameraInfo (facing=%d orientation=%d)",
-                info.facing, info.orientation);
+        LOGI("Target type primed via getCameraInfo");
     }
 }
 
@@ -205,13 +214,11 @@ extern "C" void HAL_getCameraInfo(int cameraId, struct CameraInfo* cameraInfo)
         cameraInfo->facing = CAMERA_FACING_BACK;
         cameraInfo->orientation = 0;
     }
-    // The blob reports sensor_mount_angle=90 but the CM7 camera stack does
-    // not call setDisplayOrientation() and rotates the live preview based
-    // on this value, producing an incorrectly oriented display on the Y210.
-    // Override to 0 so the preview appears upright; JPEG rotation is handled
-    // separately via KEY_ROTATION in setParameters.
+    // The sensor is physically mounted at 90° in the phone (landscape sensor
+    // in a portrait device). orientation=90 tells the camera app to rotate
+    // the preview 90° clockwise so it appears upright in portrait mode.
     if (cameraInfo) {
-        cameraInfo->orientation = 0;
+        cameraInfo->orientation = 90;
     }
 }
 
@@ -353,8 +360,7 @@ CameraParameters Y210CameraWrapper::seedParameters() const
     params.set(CameraParameters::KEY_FOCUS_MODE, CameraParameters::FOCUS_MODE_AUTO);
     params.set(CameraParameters::KEY_WHITE_BALANCE,
             CameraParameters::WHITE_BALANCE_AUTO);
-    params.set(CameraParameters::KEY_ANTIBANDING,
-            CameraParameters::ANTIBANDING_AUTO);
+    params.set(CameraParameters::KEY_EFFECT, CameraParameters::EFFECT_NONE);
     params.set(CameraParameters::KEY_ROTATION, "0");
     // 432x320 is NOT in the blob's internal valid-preview-size list;
     // the blob rejects it with "Invalid preview size requested: 432x320"
@@ -364,19 +370,32 @@ CameraParameters Y210CameraWrapper::seedParameters() const
     params.set(CameraParameters::KEY_SUPPORTED_PICTURE_SIZES,
             "640x480,512x384,320x240");
     params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATES, "15");
+    // Some vendor blobs reject setParameters() when these are missing.
+    params.set(CameraParameters::KEY_PREVIEW_FPS_RANGE, "5000,31000");
+    params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FPS_RANGE, "(5000,31000)");
     params.set(CameraParameters::KEY_SUPPORTED_PICTURE_FORMATS,
             CameraParameters::PIXEL_FORMAT_JPEG);
     params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS,
             CameraParameters::PIXEL_FORMAT_YUV420SP);
     params.set(CameraParameters::KEY_SUPPORTED_WHITE_BALANCE,
             CameraParameters::WHITE_BALANCE_AUTO);
-    params.set(CameraParameters::KEY_SUPPORTED_ANTIBANDING,
-            CameraParameters::ANTIBANDING_AUTO);
+    params.set(CameraParameters::KEY_SUPPORTED_EFFECTS, CameraParameters::EFFECT_NONE);
     params.set(CameraParameters::KEY_SUPPORTED_FOCUS_MODES,
             CameraParameters::FOCUS_MODE_AUTO);
     params.setVideoSize(352, 288);
     params.set(CameraParameters::KEY_VIDEO_FRAME_FORMAT,
             CameraParameters::PIXEL_FORMAT_YUV420SP);
+    params.set(CameraParameters::KEY_VIDEO_HIGH_FRAME_RATE,
+            CameraParameters::VIDEO_HFR_OFF);
+    params.set(CameraParameters::KEY_SUPPORTED_VIDEO_HIGH_FRAME_RATE_MODES,
+            CameraParameters::VIDEO_HFR_OFF);
+    params.set(CameraParameters::KEY_SUPPORTED_HFR_SIZES, "352x288");
+    params.set(CameraParameters::KEY_DENOISE, CameraParameters::DENOISE_OFF);
+    params.set(CameraParameters::KEY_SUPPORTED_DENOISE, CameraParameters::DENOISE_OFF);
+    params.set(CameraParameters::KEY_REDEYE_REDUCTION,
+            CameraParameters::REDEYE_REDUCTION_DISABLE);
+    params.set(CameraParameters::KEY_SUPPORTED_REDEYE_REDUCTION,
+            CameraParameters::REDEYE_REDUCTION_DISABLE);
     params.set("supported-video-sizes", "352x288,320x240,176x144");
     params.set("preferred-preview-size-for-video", "352x288");
     return params;
@@ -449,8 +468,8 @@ CameraParameters Y210CameraWrapper::sanitizeParameters(
     copyParameterIfPresent(&safe, *raw,
             CameraParameters::KEY_SUPPORTED_WHITE_BALANCE);
     copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ANTIBANDING);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_ANTIBANDING);
+    // Do not propagate supported antibanding lists from the blob; the Y210 blob
+    // rejects antibanding entirely and we don't want to reintroduce it via cache.
     copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ZOOM);
     copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_MAX_ZOOM);
     copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ZOOM_RATIOS);
