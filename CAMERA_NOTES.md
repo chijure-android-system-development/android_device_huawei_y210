@@ -12,7 +12,8 @@ Ciclo básico de cámara confirmado en dispositivo:
 - `mediaserver` sobrevive todo el ciclo — OK
 - Preview de VideoCamera (lanzamiento directo) — OK
 - Switch foto→video — OK (preview visible en modo video)
-- Reabrir cámara foto tras ciclo video — **pendiente validar** (fix en progreso: retry 250ms)
+- Reabrir cámara foto tras ciclo video — **pendiente validar** (fix aplicado: retry doble)
+- Grabación de video — **Pendiente**
 - Grabación de video — **Pendiente**
 
 ## Props requeridos
@@ -97,19 +98,51 @@ if (cameraInfo) {
 }
 ```
 
-### Retry en startPreview (2026-05-31)
+### Retry doble en startPreview tras ciclo video (2026-05-31)
 
-Cuando Camera.java reabre la cámara tras un ciclo video, el firmware msm7x27 puede
-no haberse liberado completamente del hardware anterior → `startPreview` retorna
-`UNKNOWN_ERROR` (~0x80000000). Se añade un retry con delay de 250ms:
+Cuando Camera.java reabre la cámara tras un ciclo video (con `keep()` eliminado),
+el firmware msm7x27 ISP puede no haberse liberado del hardware anterior →
+`startPreview` retorna `UNKNOWN_ERROR` (0x80000000 = rc=-2147483648).
+
+**Capa 1 — HAL (Y210CameraWrapper.cpp):** retry con delay de 250ms al nivel del
+wrapper, antes de que el error llegue a Java:
 
 ```cpp
 status_t rc = mLibInterface->startPreview();
 if (rc != NO_ERROR && rc != INVALID_OPERATION) {
-    usleep(250000);  // esperar a que el firmware anterior libere la ISP
+    usleep(250000);  // esperar a que el firmware libere el ISP
     rc = mLibInterface->startPreview();
 }
 ```
+
+**Capa 2 — App (Camera.java):** si el retry del wrapper falla igual, Camera.java
+no crashea. Inspirado en el ROM stock (que tiene `mStartPreviewFail` y usa el
+handler `RESTART_PREVIEW = 3` para reintentos asincrónicos):
+
+```java
+} catch (Throwable ex) {
+    if (isY210CameraWorkaroundEnabled()) {
+        mStartPreviewFail = true;
+        closeCamera();
+        if (!mHandler.hasMessages(RESTART_PREVIEW)) {
+            mHandler.sendEmptyMessageDelayed(RESTART_PREVIEW, 500);
+        }
+        return;  // no crash
+    }
+    closeCamera();
+    throw new RuntimeException("startPreview failed", ex);
+}
+mStartPreviewFail = false;
+```
+
+El Handler `RESTART_PREVIEW` llama `restartPreview()` 500ms después, cuando el
+ISP ya debe estar libre. El ROM stock también usa `mStartPreviewFail` + Handler
+retry — la diferencia es que CM7 no lo usaba para este caso específico.
+
+**Análisis del ROM stock (2026-05-31):** El `.odex` descompilado confirmó:
+- `VideoCamera` stock tiene `DELAYED_ONRESUME_FUNCTION = 7` (Handler delay en resume)
+- Ambas actividades tienen `mStartPreviewFail` (manejo gracioso del fallo)
+- La stock no crashea en startPreview: retry asincrónico vía Handler
 
 ---
 
@@ -188,9 +221,9 @@ primer mmap tiene éxito.
 
 **Trade-off**: el switch foto→video tarda ~100-500ms más (re-init de hardware).
 
-### Fix 3: Wrapper — retry en startPreview tras ciclo video
+### Fix 3: Wrapper + App — retry doble en startPreview
 
-Ver sección anterior "Retry en startPreview".
+Ver sección anterior "Retry doble en startPreview tras ciclo video".
 
 ---
 
@@ -206,9 +239,9 @@ make -j$(nproc) libsurfaceflinger copybit.msm7k
 # CameraService (registerBuffers non-fatal, stop+restart en setPreviewDisplay)
 make -j$(nproc) libcameraservice
 
-# Camera APK (keep() eliminado)
+# Camera APK (keep() eliminado + retry Handler en startPreview)
 # DEBE compilarse en Docker, no en el host Ubuntu 24:
-docker exec cm7-builder bash -c "cd /home/builder/cm7 && . build/envsetup.sh && lunch cyanogen_y210-eng 2>/dev/null && make -j\$(nproc) Camera"
+docker exec cm7-builder bash -c "cd /home/builder/cm7 && . build/envsetup.sh && lunch cyanogen_y210-eng 2>/dev/null && make -j\$(nproc) libcamera Camera"
 docker cp cm7-builder:/home/builder/cm7/out/target/product/y210/system/app/Camera.apk /tmp/Camera_new.apk
 
 # Push todo
