@@ -1,19 +1,20 @@
 # Camera Notes — Huawei Y210
 
-## Estado (2026-05-31) — EN PROGRESO
+## Estado (2026-05-31) — ESTABLE
 
-Ciclo básico de cámara confirmado en dispositivo:
+Ciclo completo de cámara confirmado en dispositivo:
 
 - App Cámara abre — OK
-- Preview `640x480` en **color**, orientación portrait correcta — OK
+- Preview foto `640x480` en **color**, orientación portrait — OK
 - Captura de foto — OK: SHUTTER + RAW_IMAGE (294912 B) + COMPRESSED_IMAGE (~55 KB JPEG)
 - Preview se reinicia automáticamente tras la foto — OK
-- `close → reopen` — OK: `release()` llama blob slot 26; nuevo `open` crea instancia fresca
+- `close → reopen` — OK
 - `mediaserver` sobrevive todo el ciclo — OK
 - Preview de VideoCamera (lanzamiento directo) — OK
 - Switch foto→video — OK (preview visible en modo video)
-- Reabrir cámara foto tras ciclo video — **pendiente validar** (fix aplicado: retry doble)
-- Grabación de video — **Pendiente**
+- Reabrir cámara foto tras ciclo video — OK (retry doble wrapper + Handler)
+- **Grabación de video H.263 352×288 15fps — OK** (archivo MP4/3GP guardado en galería)
+- Video HD / M4V 640×480 — N/A (sin driver kernel `msm_vidc_enc`)
 - Grabación de video — **Pendiente**
 
 ## Props requeridos
@@ -227,6 +228,63 @@ Ver sección anterior "Retry doble en startPreview tras ciclo video".
 
 ---
 
+## Grabación de video
+
+### Diagnóstico del encoder (2026-05-31)
+
+El kernel precompilado del Y210 **no incluye el driver `msm_vidc_enc`** (codec de
+video hardware de Qualcomm). Sin `/dev/msm_vidc_enc`, el encoder OMX
+`OMX.qcom.video.encoder.mpeg4` (en `libOmxVidEnc.so`) no puede inicializarse.
+Stagefright cae al encoder **software** `M4vH263Encoder`.
+
+El perfil "high" original (`m4v 640×480 30fps 2Mbps`) excede la capacidad del
+encoder software → `Failed to initialize the encoder` → `start failed: -2147483648`.
+
+### Fix 1 — media_profiles.xml: perfiles ajustados al encoder software
+
+`prebuilt/system/etc/media_profiles.xml`:
+
+```xml
+<!-- Antes -->
+<EncoderProfile quality="high" fileFormat="mp4" duration="60">
+    <Video codec="m4v" bitRate="2000000" width="640" height="480" frameRate="30" />
+
+<!-- Después -->
+<EncoderProfile quality="high" fileFormat="mp4" duration="60">
+    <Video codec="h263" bitRate="512000" width="352" height="288" frameRate="15" />
+```
+
+H.263 a 352×288 15fps 512Kbps es el máximo que el encoder software puede manejar
+de forma estable en el Cortex-A5 @ 600MHz. El blob también reporta
+`preferred-preview-size-for-video=352x288` y `supported-video-sizes=352x288,...`.
+
+### Fix 2 — StagefrightRecorder: size check no-fatal para parámetros vacíos
+
+`frameworks/base/media/libmediaplayerservice/StagefrightRecorder.cpp`:
+
+```cpp
+// Antes: -1x-1 (parámetros vacíos) fallaba el check y abortaba la grabación
+if (frameWidth  < 0 || frameWidth  != mVideoWidth || ...)
+
+// Después: solo falla si el tamaño ES CONOCIDO y NO coincide
+if (frameWidth > 0 && frameHeight > 0 &&
+        (frameWidth != mVideoWidth || frameHeight != mVideoHeight))
+```
+
+Cuando `getParameters()` devuelve vacío (caso del stop/restart de
+`setPreviewDisplay`), el check devuelve (-1,-1). La condición original lo
+trataba como error. Con la nueva condición, (-1,-1) es "desconocido" y se
+permite continuar — la cámara sigue funcionando correctamente.
+
+### Resultado confirmado en dispositivo
+
+- Preview de video: 352×288, color — OK
+- Grabación inicia: `startRecording exit rc=0 recordingRunning=1`
+- Ambas pistas (video H.263 + audio AMR-NB): iniciadas
+- Archivo MP4 guardado en galería — OK
+
+---
+
 ## Notas de build
 
 ```bash
@@ -251,6 +309,14 @@ adb push out/target/product/y210/system/lib/libsurfaceflinger.so /system/lib/
 adb push out/target/product/y210/system/lib/hw/copybit.msm7k.so /system/lib/hw/
 adb push out/target/product/y210/system/lib/libcameraservice.so /system/lib/
 adb push /tmp/Camera_new.apk /system/app/Camera.apk
+adb push device/huawei/y210/prebuilt/system/etc/media_profiles.xml /system/etc/
+
+# libmediaplayerservice (StagefrightRecorder size check relajado)
+make -j$(nproc) libmediaplayerservice
+# o desde Docker:
+docker exec cm7-builder bash -c "cd /home/builder/cm7 && . build/envsetup.sh && lunch cyanogen_y210-eng 2>/dev/null && make -j\$(nproc) libmediaplayerservice"
+docker cp cm7-builder:/home/builder/cm7/out/target/product/y210/system/lib/libmediaplayerservice.so /tmp/
+adb push /tmp/libmediaplayerservice.so /system/lib/
 adb shell sync && adb reboot
 ```
 
