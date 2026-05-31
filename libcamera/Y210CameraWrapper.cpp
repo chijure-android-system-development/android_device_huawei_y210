@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <dlfcn.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <cutils/properties.h>
 #include <utils/Log.h>
@@ -626,6 +627,14 @@ status_t Y210CameraWrapper::startPreview()
          mLibInterface.get(), pw, ph, pf ? pf : "(null)",
          mPreviewRunning, mRecordingRunning);
     status_t rc = mLibInterface->startPreview();
+    if (rc != NO_ERROR && rc != INVALID_OPERATION) {
+        // The camera ISP may be transiently busy if a previous hardware
+        // instance hasn't fully released it yet. Retry once after a short
+        // delay (typically needed after a full close/reopen cycle).
+        LOGW("Y210WRAP: startPreview rc=%d, retrying after 250ms", rc);
+        usleep(250000);
+        rc = mLibInterface->startPreview();
+    }
     if (rc == NO_ERROR) {
         mPreviewRunning = true;
     }

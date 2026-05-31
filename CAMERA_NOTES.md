@@ -1,16 +1,19 @@
 # Camera Notes — Huawei Y210
 
-## Estado (2026-05-30) — ESTABLE
+## Estado (2026-05-31) — EN PROGRESO
 
-Todo el ciclo básico de cámara funciona en dispositivo:
+Ciclo básico de cámara confirmado en dispositivo:
 
 - App Cámara abre — OK
-- Preview `640x480` en color, orientación portrait correcta — OK
+- Preview `640x480` en **color**, orientación portrait correcta — OK
 - Captura de foto — OK: SHUTTER + RAW_IMAGE (294912 B) + COMPRESSED_IMAGE (~55 KB JPEG)
 - Preview se reinicia automáticamente tras la foto — OK
 - `close → reopen` — OK: `release()` llama blob slot 26; nuevo `open` crea instancia fresca
 - `mediaserver` sobrevive todo el ciclo — OK
-- Video — **Pendiente**
+- Preview de VideoCamera (lanzamiento directo) — OK
+- Switch foto→video — OK (preview visible en modo video)
+- Reabrir cámara foto tras ciclo video — **pendiente validar** (fix en progreso: retry 250ms)
+- Grabación de video — **Pendiente**
 
 ## Props requeridos
 
@@ -94,44 +97,127 @@ if (cameraInfo) {
 }
 ```
 
+### Retry en startPreview (2026-05-31)
+
+Cuando Camera.java reabre la cámara tras un ciclo video, el firmware msm7x27 puede
+no haberse liberado completamente del hardware anterior → `startPreview` retorna
+`UNKNOWN_ERROR` (~0x80000000). Se añade un retry con delay de 250ms:
+
+```cpp
+status_t rc = mLibInterface->startPreview();
+if (rc != NO_ERROR && rc != INVALID_OPERATION) {
+    usleep(250000);  // esperar a que el firmware anterior libere la ISP
+    rc = mLibInterface->startPreview();
+}
+```
+
+---
+
 ## Pipeline de display del preview
 
 El blob produce frames NV21 (`HAL_PIXEL_FORMAT_YCrCb_420_SP`, format 17).
 El path de overlay está deshabilitado (el blob crasheaba al probar metadatos de
 overlay en algunos ciclos de vida). SurfaceFlinger usa el path GL de software.
 
-**Dos fixes necesarios en `hardware/msm7k/libcopybit/copybit.cpp`:**
+### copybit — `hardware/msm7k/libcopybit/copybit.cpp`
 
-1. `set_image(&req->src)` debe llamarse **antes** de `set_infos()` para que la
-   detección YUV en `set_infos` lea `req->src.format` ya inicializado.
-2. `set_infos()` suprime `MDP_DITHER` para fuentes YUV — el driver msm7x27
-   devuelve `EINVAL` de `MSMFB_BLIT` si ese flag está presente con fuente YUV.
+Dos bugs que producían `EINVAL` del ioctl `MSMFB_BLIT`:
 
-El copybit sigue fallando (los buffers de preview son de `pmem_adsp`, dominio
-del ISP; `MSMFB_BLIT` solo acepta `pmem` del dominio display). El path GL es
-el camino correcto para este hardware sin overlay.
+1. **Orden de llamadas**: `set_image(&req->src)` debe llamarse **antes** de
+   `set_infos()` para que `req->src.format` esté inicializado cuando se evalúa
+   la condición YUV en `set_infos`.
+2. **MDP_DITHER**: `set_infos()` suprime `MDP_DITHER` para fuentes YUV — el
+   driver msm7x27 retorna `EINVAL` de `MSMFB_BLIT` si ese flag está presente.
 
-**Fix en `frameworks/base/services/surfaceflinger/TextureManager.cpp`:**
+Los buffers de preview son de `pmem_adsp` (dominio ISP); `MSMFB_BLIT` solo
+acepta `pmem` del dominio display → el copybit sigue fallando, pero el path GL
+actúa como fallback correcto.
 
-- `isSupportedYuvFormat()` incluye `HAL_PIXEL_FORMAT_YCrCb_420_SP`.
-- En `loadTexture()`, NV21 se convierte a RGB565 por software (BT.601) antes
-  de subirlo como textura GL. La conversión procesa ~307 K píx/frame a ~7 fps
-  (~30 ms/frame en Cortex-A5 a 600 MHz).
+### TextureManager — `frameworks/base/services/surfaceflinger/TextureManager.cpp`
+
+- `isSupportedYuvFormat()` incluye `HAL_PIXEL_FORMAT_YCrCb_420_SP` (NV21).
+- En `loadTexture()`, NV21 se convierte a RGB565 por software (BT.601, función
+  `convertNV21toRGB565`) antes de subirlo como textura GL.
+- Procesa ~307 K píx/frame a ~7 fps (~30 ms/frame en Cortex-A5 a 600 MHz).
+
+---
+
+## Pipeline de display del preview de VideoCamera
+
+### Problema raíz: pmem_adsp fd cross-process
+
+El blob asigna los buffers de preview en `/dev/pmem_adsp`. El ioctl
+`SurfaceFlinger::registerBuffers` intenta `mmap` este fd desde el proceso
+SurfaceFlinger vía Binder. El kernel PMEM del msm7x27 solo permite ese mmap
+**una vez**: después de `munmap` (por `unregisterBuffers`), un segundo `mmap`
+del mismo fd falla con `EINVAL`.
+
+Consecuencia: si la foto Camera ya hizo `registerBuffers` (primer mmap del fd) y
+luego VideoCamera intenta `registerBuffers` con el **mismo fd** (caso del switch
+con `CameraHolder.keep()` activo → hardware reutilizado vía `reconnect()`),
+el segundo mmap falla → `BufferSource.mStatus = error` → `postBuffer` ignorado
+→ preview negro.
+
+### Fix 1: CameraService — `setPreviewDisplay` non-fatal + stop/restart
+
+`frameworks/base/services/camera/libcameraservice/CameraService.cpp`:
+
+- `registerPreviewBuffers()` es no-fatal en `setPreviewDisplay()` y
+  `startPreviewMode()` (el resultado ya no se propaga como error).
+- Cuando `setPreviewDisplay()` se llama con preview corriendo (`previewEnabled()`
+  = true), en lugar de llamar directamente `registerPreviewBuffers()` (que
+  fallaría con el fd antiguo), se hace:
+  ```cpp
+  mHardware->stopPreview();
+  if (mHardware->startPreview() == NO_ERROR) {
+      registerPreviewBuffers();
+  }
+  ```
+  El stop+restart hace que el HAL cree un nuevo fd pmem_adsp que aún **no** fue
+  mapeado en SurfaceFlinger → `registerBuffers` tiene éxito.
+
+### Fix 2: MenuHelper — eliminar `keep()` para obtener fd fresco
+
+`packages/apps/Camera/src/com/android/camera/MenuHelper.java`:
+
+`startCameraActivity()` llamaba `CameraHolder.instance().keep()` que mantenía
+vivo el hardware 3 segundos y forzaba `reconnect()` (mismo fd). Se elimina ese
+`keep()` para que al hacer el switch el hardware se libere completamente y
+VideoCamera obtenga una instancia nueva con fd fresco → `registerBuffers` del
+primer mmap tiene éxito.
+
+**Trade-off**: el switch foto→video tarda ~100-500ms más (re-init de hardware).
+
+### Fix 3: Wrapper — retry en startPreview tras ciclo video
+
+Ver sección anterior "Retry en startPreview".
+
+---
 
 ## Notas de build
 
 ```bash
-# Wrapper (orientación)
+# Wrapper (orientación, retry startPreview)
 make -j$(nproc) libcamera
 
 # Pipeline de display
 make -j$(nproc) libsurfaceflinger copybit.msm7k
+
+# CameraService (registerBuffers non-fatal, stop+restart en setPreviewDisplay)
+make -j$(nproc) libcameraservice
+
+# Camera APK (keep() eliminado)
+# DEBE compilarse en Docker, no en el host Ubuntu 24:
+docker exec cm7-builder bash -c "cd /home/builder/cm7 && . build/envsetup.sh && lunch cyanogen_y210-eng 2>/dev/null && make -j\$(nproc) Camera"
+docker cp cm7-builder:/home/builder/cm7/out/target/product/y210/system/app/Camera.apk /tmp/Camera_new.apk
 
 # Push todo
 adb remount
 adb push out/target/product/y210/system/lib/libcamera.so /system/lib/
 adb push out/target/product/y210/system/lib/libsurfaceflinger.so /system/lib/
 adb push out/target/product/y210/system/lib/hw/copybit.msm7k.so /system/lib/hw/
+adb push out/target/product/y210/system/lib/libcameraservice.so /system/lib/
+adb push /tmp/Camera_new.apk /system/app/Camera.apk
 adb shell sync && adb reboot
 ```
 
