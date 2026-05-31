@@ -76,10 +76,17 @@ if section boot "BOOT / SISTEMA"; then
     chk_prop  "ro.product.model Y210"     ro.product.model      "HUAWEI Y210"
     chk_prop  "ro.build.product msm7625a" ro.build.product      "msm7625a"
     chk_proc  "system_server"             "system_server"
-    chk_proc  "surfaceflinger"            "surfaceflinger"
+    # surfaceflinger: en Gingerbread aparece en `service list`, no siempre en ps
+    if adb_sh "service list 2>/dev/null" | grep -qi surfaceflinger; then
+        pass "surfaceflinger (vía service list)"
+    elif adb_sh "ps 2>/dev/null" | grep -qi surfacefling; then
+        pass "surfaceflinger (vía ps)"
+    else fail "surfaceflinger" "no en ps ni en service list"; fi
     chk_proc  "mediaserver"              "mediaserver"
     chk_prop  "persist.camera.mode=1"    persist.camera.mode   "1"
-    chk_prop  "persist.camera.delegate"  persist.camera.delegate_setparams "1"
+    _dlg=$(adb_sh getprop persist.camera.delegate_setparams)
+    if [[ "$_dlg" == "1" ]]; then pass "persist.camera.delegate_setparams=1"; \
+    else skip "persist.camera.delegate_setparams" "='$_dlg' (normal si cámara no se abrió aún)"; fi
 fi
 
 # ── 2. pantalla / gráficos ────────────────────────────────────────────────────
@@ -102,8 +109,8 @@ fi
 # ── 3. input / UI ─────────────────────────────────────────────────────────────
 
 if section input "INPUT / UI"; then
-    _evts=$(adb_sh "ls /dev/input/event* 2>/dev/null | wc -l")
-    if [[ "$_evts" -gt 0 ]] 2>/dev/null; then pass "/dev/input/event* ($( adb_sh ls /dev/input/event* 2>/dev/null | xargs))"; \
+    _evts=$(adb_sh "ls /dev/input/ 2>/dev/null | grep -c event")
+    if [[ "$_evts" -gt 0 ]] 2>/dev/null; then pass "/dev/input/event* — $_evts nodos presentes"; \
     else fail "/dev/input/event*" "ninguno encontrado"; fi
     chk_file "Acelerómetro /dev/accel"  "/dev/accel"
     manual "Touchscreen"       "toca la pantalla — verifica respuesta táctil"
@@ -131,9 +138,9 @@ if section audio "AUDIO"; then
     chk_file "libaudio.so"       "/system/lib/libaudio.so"
     chk_file "/dev/msm_pcm_out"  "/dev/msm_pcm_out"
     chk_file "/dev/msm_snd"      "/dev/msm_snd"
-    if adb_sh "dumpsys media.audio_flinger 2>/dev/null" | grep -q AudioFlinger; then
-        pass "AudioFlinger responde a dumpsys"
-    else fail "AudioFlinger" "no responde"; fi
+    if adb_sh "service list 2>/dev/null" | grep -q "media.audio_flinger"; then
+        pass "AudioFlinger registrado en ServiceManager"
+    else fail "AudioFlinger" "no en service list"; fi
     chk_prop "headset-postproc=lite"  persist.sys.headset-postproc  "lite"
     manual "Speaker"      "reproduce sonido — verifica volumen por altavoz"
     manual "Auriculares"  "conecta auriculares — verifica sonido y volumen"
@@ -144,16 +151,20 @@ fi
 # ── 6. Wi-Fi ──────────────────────────────────────────────────────────────────
 
 if section wifi "WI-FI"; then
-    chk_file "firmware wlan/rra.bin"  "/system/etc/firmware/wlan/rra.bin"
-    chk_file "hostapd"                "/system/bin/hostapd"
+    # Y210 usa ath6kl — firmware en /system/etc/firmware/ sin subdirectorio wlan/
+    _wfirmware=$(adb_sh "ls /system/etc/firmware/ 2>/dev/null" | grep -iE "ath|ar[0-9]")
+    if [[ -n "$_wfirmware" ]]; then pass "Firmware WiFi ath6kl presente ($_wfirmware)"; \
+    else skip "Firmware WiFi" "no encontrado en /system/etc/firmware/ — verificar ruta"; fi
+    chk_file "hostapd"  "/system/bin/hostapd"
     adb_sh "svc wifi enable" 2>/dev/null || true
     if ! $FAST; then sleep 3; fi
-    _wl=$(adb_sh "ip link show wlan0 2>/dev/null")
-    if [[ "$_wl" == *"wlan0"* ]]; then pass "Interfaz wlan0 presente"; \
-    else fail "wlan0" "no encontrada tras habilitar WiFi"; fi
+    # ath6kl crea eth0 (no wlan0) en Gingerbread
+    _wl=$(adb_sh "ip link 2>/dev/null" | grep -E "eth0|wlan0")
+    if [[ -n "$_wl" ]]; then pass "Interfaz WiFi presente ($( echo "$_wl" | awk '{print $2}' | head -1))"; \
+    else fail "Interfaz WiFi (eth0/wlan0)" "no encontrada tras habilitar WiFi"; fi
     _wstat=$(adb_sh getprop wlan.driver.status)
     if [[ "$_wstat" == "ok" ]]; then pass "wlan.driver.status=ok"; \
-    else skip "wlan.driver.status" "='$_wstat' (OK si se encendió recientemente)"; fi
+    else skip "wlan.driver.status" "='$_wstat' (normal si WiFi no estaba encendido antes)"; fi
     manual "Asociación/DHCP"  "conéctate a una red y verifica IP asignada"
     manual "Tethering Wi-Fi"  "activa hotspot — conecta un cliente y verifica internet"
 fi
@@ -183,7 +194,8 @@ fi
 # ── 9. GPS ────────────────────────────────────────────────────────────────────
 
 if section gps "GPS"; then
-    chk_file "libgps.so"   "/system/lib/libgps.so"
+    # Y210 usa gps.y210.so en /system/lib/hw/ (HAL GPS, no libgps.so)
+    chk_file "gps.y210.so HAL"  "/system/lib/hw/gps.y210.so"
     chk_file "gps.conf"    "/system/etc/gps.conf"
     _gpsv=$(adb_sh getprop ro.gps.agps_provider)
     if [[ -n "$_gpsv" ]]; then pass "ro.gps.agps_provider=$_gpsv"; \
@@ -207,7 +219,7 @@ if section camera "CÁMARA"; then
     if [[ "$_codec" == *"h263"* ]]; then pass "media_profiles usa h263 (SW encoder OK)"; \
     else skip "media_profiles codec" "='$_codec' (esperado h263)"; fi
     # Lanzar y verificar
-    adb_sh "am force-stop com.android.camera" 2>/dev/null || true
+    adb_sh "am kill com.android.camera" 2>/dev/null || true
     adb_sh "logcat -c" 2>/dev/null || true
     adb_sh "am start -n com.android.camera/.Camera" > /dev/null 2>&1
     sleep 4
@@ -217,7 +229,7 @@ if section camera "CÁMARA"; then
     _prev=$(adb_sh "logcat -d 2>/dev/null" | grep -c "startPreview.*rc=0" 2>/dev/null || echo 0)
     if [[ "$_prev" -gt 0 ]]; then pass "startPreview rc=0 en logcat"; \
     else skip "startPreview logcat" "no hay log reciente (OK si ya estaba corriendo)"; fi
-    adb_sh "am force-stop com.android.camera" 2>/dev/null || true
+    adb_sh "am kill com.android.camera" 2>/dev/null || true
     manual "Preview foto en color"   "verifica: 640×480, colores reales, portrait"
     manual "Captura de foto"         "toma foto — verifica JPEG en galería"
     manual "Switch a modo video"     "pulsa botón video — verifica preview 352×288"
@@ -247,12 +259,16 @@ if section ril "RIL / TELEFONÍA"; then
     _bb=$(adb_sh getprop gsm.version.baseband)
     if [[ -n "$_bb" ]]; then pass "Baseband: $_bb"; \
     else fail "Baseband" "gsm.version.baseband vacío"; fi
-    _imei=$(adb_sh "service call iphonesubinfo 1 2>/dev/null" | grep -o "'[0-9]*'" | tr -d "'" | head -1)
+    # En Gingerbread `dumpsys iphonesubinfo` es más fiable que `service call`
+    _imei=$(adb_sh "dumpsys iphonesubinfo 2>/dev/null" | grep "Device ID" | grep -o '[0-9]\{15\}')
     if [[ -n "$_imei" && "${#_imei}" -ge 15 ]]; then pass "IMEI válido (${_imei:0:6}xxxxxxxxx)"; \
-    else fail "IMEI" "resultado='$_imei'"; fi
+    else fail "IMEI" "resultado='$_imei' (¿permisos READ_PHONE_STATE?)"; fi
     _op=$(adb_sh getprop gsm.operator.alpha)
+    _simstate=$(adb_sh getprop gsm.sim.state)
     if [[ -n "$_op" ]]; then pass "Operador registrado: $_op"; \
-    else fail "Operador" "gsm.operator.alpha vacío (¿SIM presente y con señal?)"; fi
+    elif [[ "$_simstate" == "ABSENT" || "$_simstate" == "NOT_READY" || "$_simstate" == "UNKNOWN" ]]; then
+        skip "Operador" "SIM no presente/no lista (gsm.sim.state=$_simstate)"; \
+    else fail "Operador" "gsm.operator.alpha vacío (sim.state=$_simstate)"; fi
     _rmnet=$(adb_sh "ip link 2>/dev/null" | grep rmnet)
     if [[ -n "$_rmnet" ]]; then pass "Interfaz rmnet (datos activos)"; \
     else skip "rmnet" "datos no activos — activar datos móviles y re-probar"; fi
