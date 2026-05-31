@@ -123,9 +123,12 @@ fi
 
 if section lights "LUCES / VIBRACIÓN"; then
     chk_file "lights HAL"  "/system/lib/hw/lights.y210.so"
+    # Despertar pantalla antes de leer brightness (puede ser 0 con pantalla apagada)
+    adb_sh "input keyevent 26" 2>/dev/null; sleep 1
     _bl=$(adb_sh "cat /sys/class/leds/lcd-backlight/brightness 2>/dev/null")
-    if [[ -n "$_bl" && "$_bl" -gt 0 ]] 2>/dev/null; then pass "Backlight brightness=$_bl"; \
-    else fail "Backlight brightness" "resultado='$_bl'"; fi
+    _bl_max=$(adb_sh "cat /sys/class/leds/lcd-backlight/max_brightness 2>/dev/null")
+    if [[ -n "$_bl_max" && "$_bl_max" -gt 0 ]] 2>/dev/null; then pass "Backlight brightness=$_bl max=$_bl_max"; \
+    else fail "Backlight brightness" "resultado='$_bl' max='$_bl_max'"; fi
     adb_sh "echo 100 > /sys/class/timed_output/vibrator/enable" 2>/dev/null || true
     if adb_sh "[ -e '/sys/class/timed_output/vibrator/enable' ] && echo y" | grep -q y; then
         pass "Vibrador sysfs accesible (pulso 100ms enviado)"
