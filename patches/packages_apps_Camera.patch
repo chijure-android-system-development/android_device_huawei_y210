@@ -44,7 +44,7 @@ index e02ca1f4..49458d17 100644
  
 -
 diff --git a/src/com/android/camera/Camera.java b/src/com/android/camera/Camera.java
-index af7da889..52778155 100644
+index af7da889..43e8f677 100644
 --- a/src/com/android/camera/Camera.java
 +++ b/src/com/android/camera/Camera.java
 @@ -62,6 +62,7 @@ import android.view.Menu;
@@ -63,7 +63,15 @@ index af7da889..52778155 100644
  import java.text.SimpleDateFormat;
  import java.util.ArrayList;
  import java.util.Collections;
-@@ -607,6 +609,9 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -405,6 +407,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+     }
+ 
+     private void initializeZoom() {
++        if (mParameters == null || mCameraDevice == null) return;
+         if (!mParameters.isZoomSupported()) return;
+ 
+         mZoomMax = mParameters.getMaxZoom();
+@@ -607,6 +610,9 @@ public class Camera extends BaseCamera implements View.OnClickListener,
  
          public void onPictureTaken(
                  final byte [] jpegData, final android.hardware.Camera camera) {
@@ -73,7 +81,7 @@ index af7da889..52778155 100644
              if (mPausing) {
                  return;
              }
-@@ -872,17 +877,22 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -872,17 +878,22 @@ public class Camera extends BaseCamera implements View.OnClickListener,
              }
  
              mCameraDevice.setParameters(mParameters);
@@ -96,7 +104,7 @@ index af7da889..52778155 100644
              // If we are already in the middle of taking a snapshot then ignore.
              if (mPausing || mStatus == SNAPSHOT_IN_PROGRESS || !mPreviewing) {
                  return;
-@@ -936,9 +946,27 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -936,9 +947,27 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          return dateFormat.format(date);
      }
  
@@ -124,7 +132,7 @@ index af7da889..52778155 100644
          prefs = getSharedPreferences("com.android.camera_preferences", 0);
          powerShutter(prefs);
          setContentView(R.layout.camera);
-@@ -957,26 +985,11 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -957,26 +986,11 @@ public class Camera extends BaseCamera implements View.OnClickListener,
  
          // we need to reset exposure for the preview
          resetExposureCompensation();
@@ -156,7 +164,7 @@ index af7da889..52778155 100644
  
          // don't set mSurfaceHolder here. We have it set ONLY within
          // surfaceChanged / surfaceDestroyed, other parts of the code
-@@ -1006,16 +1019,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1006,16 +1020,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
              mSwitcher.addTouchView(findViewById(R.id.camera_switch_set));
          }
  
@@ -174,7 +182,7 @@ index af7da889..52778155 100644
      }
  
      private void changeHeadUpDisplayState() {
-@@ -1141,11 +1145,13 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1141,11 +1146,13 @@ public class Camera extends BaseCamera implements View.OnClickListener,
  
      @Override
      public void onStop() {
@@ -188,7 +196,7 @@ index af7da889..52778155 100644
      }
  
      private void checkStorage() {
-@@ -1209,6 +1215,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1209,6 +1216,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
                      outputStream.close();
  
                      setResult(RESULT_OK);
@@ -196,7 +204,7 @@ index af7da889..52778155 100644
                      finish();
                  } catch (IOException ex) {
                      // ignore exception
-@@ -1219,6 +1226,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1219,6 +1227,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
                  Bitmap bitmap = createCaptureBitmap(data);
                  setResult(RESULT_OK,
                          new Intent("inline-data").putExtra("data", bitmap));
@@ -204,7 +212,7 @@ index af7da889..52778155 100644
                  finish();
              }
          } else {
-@@ -1234,10 +1242,12 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1234,10 +1243,12 @@ public class Camera extends BaseCamera implements View.OnClickListener,
                  tempUri = Uri.fromFile(path);
              } catch (FileNotFoundException ex) {
                  setResult(Activity.RESULT_CANCELED);
@@ -217,7 +225,7 @@ index af7da889..52778155 100644
                  finish();
                  return;
              } finally {
-@@ -1265,6 +1275,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1265,6 +1276,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
  
      private void doCancel() {
          setResult(RESULT_CANCELED, new Intent());
@@ -225,7 +233,7 @@ index af7da889..52778155 100644
          finish();
      }
  
-@@ -1388,6 +1399,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1388,6 +1400,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
      @Override
      protected void onResume() {
          super.onResume();
@@ -233,7 +241,7 @@ index af7da889..52778155 100644
  
          mPausing = false;
          mJpegPictureCallbackTime = 0;
-@@ -1395,7 +1407,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1395,7 +1408,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          mImageCapture = new ImageCapture();
  
          // Start the preview if it is not started.
@@ -242,7 +250,7 @@ index af7da889..52778155 100644
              resetExposureCompensation();
              if (!restartPreview()) return;
          }
-@@ -1410,6 +1422,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1410,6 +1423,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
              }
          }
          keepScreenOnAwhile();
@@ -250,7 +258,7 @@ index af7da889..52778155 100644
      }
  
      @Override
-@@ -1424,6 +1437,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1424,6 +1438,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
  
      @Override
      protected void onPause() {
@@ -258,7 +266,7 @@ index af7da889..52778155 100644
          mPausing = true;
          stopPreview();
          // Close the camera now because other activities may need to use it.
-@@ -1466,6 +1480,13 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1466,6 +1481,13 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          mHandler.removeMessages(FIRST_TIME_INIT);
  
          super.onPause();
@@ -272,7 +280,7 @@ index af7da889..52778155 100644
      }
  
      @Override
-@@ -1481,6 +1502,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1481,6 +1503,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
                      }
                  }
                  setResult(resultCode, intent);
@@ -280,7 +288,7 @@ index af7da889..52778155 100644
                  finish();
  
                  File path = getFileStreamPath(sTempCropFilename);
-@@ -1716,6 +1738,16 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1716,6 +1739,16 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          if (mHeadUpDisplay.collapse()) return;
          if (mTimerMode) return;
          Log.d(TAG, "doSnap: mFocusState=" + mFocusState + " mFocusMode=" + mFocusMode);
@@ -297,7 +305,7 @@ index af7da889..52778155 100644
          // If the user has half-pressed the shutter and focus is completed, we
          // can take the photo right away. If the focus mode is infinity, we can
          // also take the photo.
-@@ -1746,28 +1778,39 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1746,28 +1779,39 @@ public class Camera extends BaseCamera implements View.OnClickListener,
  
      private void doFocus(boolean pressed) {
          if (!mTimerMode && pressed) {
@@ -345,7 +353,7 @@ index af7da889..52778155 100644
          if (!(mFocusMode.equals(Parameters.FOCUS_MODE_INFINITY)
                    || mFocusMode.equals(Parameters.FOCUS_MODE_FIXED)
                    || mFocusMode.equals(Parameters.FOCUS_MODE_EDOF)
-@@ -1781,9 +1824,12 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1781,9 +1825,12 @@ public class Camera extends BaseCamera implements View.OnClickListener,
      }
  
      public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
@@ -358,7 +366,7 @@ index af7da889..52778155 100644
              return;
          }
  
-@@ -1792,20 +1838,25 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1792,20 +1839,25 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          // function.
          mSurfaceHolder = holder;
  
@@ -390,7 +398,7 @@ index af7da889..52778155 100644
          } else {
              // 1. Restart the preview if the size of surface was changed. The
              // framework may not support changing preview display on the fly.
-@@ -1822,23 +1873,29 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1822,23 +1874,29 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          } else {
              initializeSecondTime();
          }
@@ -420,7 +428,7 @@ index af7da889..52778155 100644
      }
  
      private void ensureCameraDevice() throws CameraHardwareException {
-@@ -1867,6 +1924,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1867,6 +1925,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
      }
  
      private void showCameraErrorAndFinish() {
@@ -428,7 +436,7 @@ index af7da889..52778155 100644
          Resources ress = getResources();
          Util.showFatalErrorAndFinish(Camera.this,
                  ress.getString(R.string.camera_error_title),
-@@ -1874,25 +1932,32 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1874,25 +1933,32 @@ public class Camera extends BaseCamera implements View.OnClickListener,
      }
  
      private boolean restartPreview() {
@@ -461,7 +469,7 @@ index af7da889..52778155 100644
          if (mPausing || isFinishing()) return;
  
          ensureCameraDevice();
-@@ -1904,9 +1969,12 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1904,9 +1970,12 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          setPreviewDisplay(mSurfaceHolder);
          Util.setCameraDisplayOrientation(this, mCameraId, mCameraDevice);
          setCameraParameters(UPDATE_PARAM_ALL);
@@ -474,15 +482,31 @@ index af7da889..52778155 100644
  
          mCameraDevice.setErrorCallback(mErrorCallback);
  
-@@ -1914,6 +1982,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1914,9 +1983,23 @@ public class Camera extends BaseCamera implements View.OnClickListener,
              Log.v(TAG, "startPreview");
              mCameraDevice.startPreview();
          } catch (Throwable ex) {
 +            logUiq("startPreview exception=" + ex);
++            // On Y210 the ISP firmware can be transiently busy after a
++            // keep()-less mode switch (the old hardware hasn't fully released
++            // it yet). Schedule a retry instead of crashing; the handler will
++            // call restartPreview() after a short delay.
++            if (isY210CameraWorkaroundEnabled()) {
++                mStartPreviewFail = true;
++                closeCamera();
++                if (!mHandler.hasMessages(RESTART_PREVIEW)) {
++                    mHandler.sendEmptyMessageDelayed(RESTART_PREVIEW, 500);
++                }
++                return;
++            }
              closeCamera();
              throw new RuntimeException("startPreview failed", ex);
          }
-@@ -1926,9 +1995,11 @@ public class Camera extends BaseCamera implements View.OnClickListener,
++        mStartPreviewFail = false;
+         mPreviewing = true;
+         mZoomState = ZOOM_STOPPED;
+         mStatus = IDLE;
+@@ -1926,9 +2009,11 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          */
          mParameters = mCameraDevice.getParameters();
          mZoomMax = mParameters.getMaxZoom();
@@ -494,7 +518,7 @@ index af7da889..52778155 100644
          if (mCameraDevice != null && mPreviewing) {
              Log.v(TAG, "stopPreview");
              mCameraDevice.stopPreview();
-@@ -1936,6 +2007,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1936,6 +2021,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          mPreviewing = false;
          // If auto focus was in progress, it would have been canceled.
          clearFocusState();
@@ -502,7 +526,7 @@ index af7da889..52778155 100644
      }
  
      private Size getOptimalPreviewSize(List<Size> sizes, double targetRatio) {
-@@ -1985,6 +2057,22 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -1985,6 +2071,22 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          return optimalSize;
      }
  
@@ -525,7 +549,7 @@ index af7da889..52778155 100644
      private void updateCameraParametersInitialize() {
          // Reset preview frame rate to the maximum because it may be lowered by
          // video camera application.
-@@ -2003,7 +2091,122 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -2003,7 +2105,122 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          }
      }
  
@@ -648,7 +672,7 @@ index af7da889..52778155 100644
          // Set picture size.
          String pictureSize = mPreferences.getString(
                  CameraSettings.KEY_PICTURE_SIZE, null);
-@@ -2015,20 +2218,46 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -2015,20 +2232,46 @@ public class Camera extends BaseCamera implements View.OnClickListener,
                      pictureSize, supported, mParameters);
          }
  
@@ -698,7 +722,7 @@ index af7da889..52778155 100644
                  mParameters.setPreviewSize(optimalSize.width, optimalSize.height);
  
                  // Zoom related settings will be changed for different preview
-@@ -2177,6 +2406,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -2177,6 +2420,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          } else {
              mFocusMode = mParameters.getFocusMode();
          }
@@ -706,7 +730,7 @@ index af7da889..52778155 100644
      }
  
      // We separate the parameters into several subsets, so we can update only
-@@ -2197,7 +2427,11 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -2197,7 +2441,11 @@ public class Camera extends BaseCamera implements View.OnClickListener,
              updateCameraParametersPreference();
          }
  
@@ -719,7 +743,7 @@ index af7da889..52778155 100644
  
          try {
              mCameraDevice.setParameters(mParameters);
-@@ -2449,6 +2683,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
+@@ -2449,6 +2697,7 @@ public class Camera extends BaseCamera implements View.OnClickListener,
          if (isFinishing() || !isCameraIdle()) return false;
          MenuHelper.gotoVideoMode(this);
          mHandler.removeMessages(FIRST_TIME_INIT);
@@ -728,10 +752,27 @@ index af7da889..52778155 100644
          return true;
      }
 diff --git a/src/com/android/camera/CameraSettings.java b/src/com/android/camera/CameraSettings.java
-index da76c629..58f0630c 100644
+index da76c629..684585e9 100644
 --- a/src/com/android/camera/CameraSettings.java
 +++ b/src/com/android/camera/CameraSettings.java
-@@ -152,11 +152,22 @@ public class CameraSettings {
+@@ -76,10 +76,15 @@ public class CameraSettings {
+     public static final int CURRENT_LOCAL_VERSION = 1;
+ 
+     // max video duration in seconds for mms and youtube.
+-    private static final int MMS_VIDEO_DURATION = CamcorderProfile.get(CamcorderProfile.QUALITY_LOW).duration;
++    private static final int MMS_VIDEO_DURATION = getMmsVideoDuration();
+     private static final int YOUTUBE_VIDEO_DURATION = 15 * 60; // 15 mins
+     private static final int DEFAULT_VIDEO_DURATION = 30 * 60; // 30 mins
+ 
++    private static int getMmsVideoDuration() {
++        CamcorderProfile profile = CamcorderProfile.get(CamcorderProfile.QUALITY_LOW);
++        return (profile != null) ? profile.duration : 30;
++    }
++
+     // MMS video length
+     public static final int DEFAULT_VIDEO_DURATION_VALUE = 30;
+ 
+@@ -152,11 +157,22 @@ public class CameraSettings {
  
      public static boolean setCameraPictureSize(
              String candidate, List<Size> supported, Parameters parameters) {
@@ -756,7 +797,7 @@ index da76c629..58f0630c 100644
              if (size.width == width && size.height == height) {
                  parameters.setPictureSize(width, height);
                  return true;
-@@ -222,11 +233,15 @@ public class CameraSettings {
+@@ -222,11 +238,15 @@ public class CameraSettings {
          // Filter out unsupported settings / options
          if (pictureSize != null) {
              final List<String> pictureSizes = sizeListToStringList(mParameters.getSupportedPictureSizes());
@@ -772,7 +813,7 @@ index da76c629..58f0630c 100644
          }
          if (whiteBalance != null) {
              filterUnsupportedOptions(group,
-@@ -416,11 +431,15 @@ public class CameraSettings {
+@@ -416,11 +436,15 @@ public class CameraSettings {
      }
  
      private static List<String> sizeListToStringList(List<Size> sizes) {
@@ -789,6 +830,24 @@ index da76c629..58f0630c 100644
      }
  
      public static void upgradeLocalPreferences(SharedPreferences pref) {
+diff --git a/src/com/android/camera/MenuHelper.java b/src/com/android/camera/MenuHelper.java
+index b5ccf207..19493db7 100644
+--- a/src/com/android/camera/MenuHelper.java
++++ b/src/com/android/camera/MenuHelper.java
+@@ -130,9 +130,10 @@ public class MenuHelper {
+         intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT);
+         intent.setClassName(activity.getPackageName(), className);
+ 
+-        // Keep the camera instance for a while.
+-        // This avoids re-opening the camera and saves time.
+-        CameraHolder.instance().keep();
++        // Do NOT keep the camera instance: the pmem_adsp heap fd is reused on
++        // reconnect(), and a second cross-process mmap of the same fd fails
++        // (EINVAL on msm7x27). Force a full release so the next open() gets a
++        // fresh fd that SurfaceFlinger can map for registerBuffers.
+ 
+         try {
+             activity.startActivity(intent);
 diff --git a/src/com/android/camera/Util.java b/src/com/android/camera/Util.java
 index eb56efba..b5716747 100644
 --- a/src/com/android/camera/Util.java

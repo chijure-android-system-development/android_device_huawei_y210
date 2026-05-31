@@ -47,7 +47,8 @@ Actualizar esta tabla cada vez que un bug se cierre con evidencia.
 - Gralloc/Copybit: **OK** (ruta `gralloc.y210` + `copybit.y210` validada)
 - EGL / Adreno 200 (HW accel): **OK** (ver `device/huawei/y210/RENDER_NOTES.md`)
 - Ghosting / corrupción de back-buffer: **OK** (fix `fb_setUpdateRect_noop` en gralloc — ver `RENDER_NOTES.md`)
-- Permisos KGSL persistentes: **Pendiente** (revisar `device/huawei/y210/RENDER_NOTES.md`)
+- Bug repetición horizontal (imagen 2.5× / "3 columnas"): **OK** (fix `numBuffers=1` en `libgralloc-qsd8k/framebuffer.cpp` — EGL Adreno detecta fd del framebuffer y fuerza stride=128px; single-buffer fuerza PMEM fd → stride=320px correcto. Ver `RENDER_NOTES.md`)
+- Permisos KGSL persistentes: **OK** (`/dev/kgsl-3d0` = `crw-rw-rw- root root` 0666 — regla en `ueventd.huawei.rc` aplicada correctamente)
 
 ### Input / UI
 
@@ -71,16 +72,11 @@ Actualizar esta tabla cada vez que un bug se cierre con evidencia.
 - Micrófono (grabación): **OK** (ver `device/huawei/y210/AUDIO_NOTES.md`)
 - Llamadas (voz): **Parcial** (downlink OK; uplink/mic requiere validar tras el overlay de `send_mic_mute_to_AudioManager`)
 - Audio por Bluetooth (A2DP/SCO): **Pendiente**
-- Radio FM (app): **Pendiente**
-  - Si el app cae con `UnsatisfiedLinkError: acquireFdNative`, falta el JNI `android.hardware.fmradio.*`.
-  - Si el app abre pero falla al habilitar (warnings `VIDIOC_S_CTRL` / se apaga el radio), verificar que existan:
-    - `system/etc/init.qcom.fm.sh`
-    - `system/bin/fm_qsoc_patches` (firmware download/calibración)
-    - `system/bin/fmconfig` (tool de soporte stock)
-    y probar `adb shell setprop ctl.start fm_dl` + `adb shell getprop hw.fm.init` (esperado `1`).
-  - Importante: en stock Y210 `hw.fm.version=67240453` (`0x4020205`). Si se usa `2243` (WCN2243) `fm_qsoc_patches` suele fallar con “Unknown Chip version”.
-  - Si `fm_qsoc_patches` sigue retornando `255`: revisar `/data/app/fm_dld_enable` y `dmesg | grep -i radio-tavarua`. En el Y210 el caso típico es timeout esperando `Interrupt Expected: 0x00010000` + kernel `tavarua_radio: UNKNOWN XFR = 98` / `ERROR STATE` (problema kernel/IRQ, no de los binarios).
-  - Notas: ver `device/huawei/y210/FM_NOTES.md`.
+- Radio FM (app): **Parcial** (JNI OK, `/dev/radio0` abre, `hw.fm.init=1` confirmado; pendiente validar audio en auriculares)
+  - Fixes aplicados (2026-04-26): `FmRxControls.java` (V4L2_CID_AUDIO_MUTE boolean), `AudioHardware.cpp` routing → `SND_DEVICE_HEADSET` + abre `/dev/msm_fm`, `android_hardware_fm_qcom.cpp` controles privados best-effort + `spawnFmInit()` incondicional.
+  - `init.qcom.fm.sh` usa `exec 3</dev/radio0; sleep 1` antes de `fm_qsoc_patches` para evitar race condition IRQ tavarua (XFR=98).
+  - Validar con `adb shell getprop hw.fm.init` (esperado `1`) y `adb shell getprop hw.fm.version` (esperado `67240453`).
+  - Ver `device/huawei/y210/FM_NOTES.md` para diagnóstico completo.
 
 ### Wi‑Fi
 
@@ -117,10 +113,13 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 ### Cámara
 
 - App cámara abre: **OK** (ver `device/huawei/y210/CAMERA_NOTES.md`)
-- Preview `640x480`: **OK** (orientación forzada a 0 en `HAL_getCameraInfo`)
+- Preview foto `640x480` color portrait: **OK** (NV21→RGB565 SW, orientation=90)
 - Captura de foto: **OK** (SHUTTER + RAW_IMAGE 294912 B + COMPRESSED_IMAGE ~55 KB JPEG)
 - `close → reopen`: **OK** (fix vtable slot 26 en `release()`)
-- Video: **Pendiente**
+- Switch foto↔video: **OK** (keep() eliminado, stop/restart en setPreviewDisplay)
+- Preview video: **OK** (H.263 352×288, mismo pipeline NV21→RGB565)
+- Grabación video H.263 352×288 15fps: **OK** (MP4 guardado en galería)
+- Video HD (640×480): **N/A** (sin driver kernel `msm_vidc_enc`)
 
 ### Almacenamiento / USB
 
@@ -135,11 +134,12 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 - Llamadas (voz): **OK** (entrante/saliente)
 - SMS: **OK** (enviar/recibir)
 - Datos móviles: **OK** (HSPA; rmnet0 con IP real validada en Claro Perú)
+- Agitación del icono de señal: **OK** (fix doble-poll en `QualcommNoSimReadyRIL.java` cases 1033/1037 — eventos QCRIL 1033 y 1002 se disparan simultáneamente; eliminada notificación redundante)
 
 ### Energía
 
-- Suspensión / apagar‑encender pantalla: **Parcial** (ver `README.md`)
-- Deep sleep real: **Pendiente** (falta evidencia en dmesg / prueba repetible)
+- Suspensión / apagar‑encender pantalla: **OK** (`early_suspend`/`late_resume` sin errores; dispositivo entra en suspend correctamente; wakeups periódicos de modem `rpcrouter_smd_xprt` son normales)
+- Deep sleep real: **OK** (validado sin USB: 5 min en suspend continuo; WiFi entra en WoW mode; único wakeup periódico es modem `rpcrouter_smd_xprt` cada ~2 min — normal para HSPA)
 
 ## Comandos rápidos por área (para acompañar logs)
 

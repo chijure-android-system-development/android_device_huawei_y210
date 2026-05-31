@@ -154,6 +154,7 @@ AudioHardware::AudioHardware() {
     if (m7xsnddriverfd < 0) {
     	LOGE("Could not open MSM SND driver.");
     } else {
+        fcntl(m7xsnddriverfd, F_SETFD, FD_CLOEXEC);
     	//Get the audio endpoints
     	if (get_sound_endpoints() < 0) {
             LOGE("Could not retrieve number of MSM SND endpoints.");
@@ -1493,6 +1494,7 @@ status_t AudioHardware::setFmOnOff(bool onoff)
             if (fmfd < 0) {
                 LOGE("Cannot open FM_DEVICE (/dev/msm_fm) errno: %d", errno);
             } else {
+                fcntl(fmfd, F_SETFD, FD_CLOEXEC);
                 LOGI("Opened FM_DEVICE (/dev/msm_fm) fd=%d", fmfd);
             }
         }
@@ -1904,6 +1906,7 @@ ssize_t AudioHardware::AudioStreamOutMSM72xx::write(const void* buffer, size_t b
         if (status < 0) { LOGE("Cannot open /dev/msm_pcm_out errno: %d", errno); close_stream(bytes); return status; }
 
         mFd = status;
+        fcntl(mFd, F_SETFD, FD_CLOEXEC);
 
         // configuration
         LOGV("get config");
@@ -2135,6 +2138,7 @@ status_t AudioHardware::AudioStreamInMSM72xx::set(
 
         // get the file handle
         mFd = status;
+        fcntl(mFd, F_SETFD, FD_CLOEXEC);
 
         // configuration
         status = ioctl(mFd, AUDIO_GET_CONFIG, &config);

@@ -51,7 +51,11 @@ COMMON_GLOBAL_CFLAGS += -DQCOM_HARDWARE
 BOARD_USES_QCOM_LIBRPC := true
 BOARD_USES_QCOM_LIBS := true
 COMMON_GLOBAL_CFLAGS += -DTARGET_MSM7x27A -DTARGET_MSM7x27
+# PARCHE-E: comentar la siguiente línea para desactivar copybit y aislar si
+# la repetición horizontal la causa el MDP blit path vs el render directo.
+# Reactivar una vez descartado o confirmado.
 TARGET_LIBAGL_USE_GRALLOC_COPYBITS := true
+#TARGET_LIBAGL_USE_GRALLOC_COPYBITS := false  # PARCHE-E activo: descomentar esta y comentar la de arriba
 
 WITH_JIT := true
 ENABLE_JSC_JIT := true
