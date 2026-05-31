@@ -134,7 +134,7 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 - Llamadas (voz): **OK** (entrante/saliente)
 - SMS: **OK** (enviar/recibir)
 - Datos móviles: **OK** (HSPA; rmnet0 con IP real validada en Claro Perú)
-- Agitación del icono de señal: **OK** (fix doble-poll en `QualcommNoSimReadyRIL.java` cases 1033/1037 — eventos QCRIL 1033 y 1002 se disparan simultáneamente; eliminada notificación redundante)
+- Agitación / ghost de iconos en status bar: **OK** (4 fixes — ver `device/huawei/y210/STATUSBAR_NOTES.md`: doble-poll RIL cases 1033/1037, guard `setIcon()` en StatusBarManagerService, copy-back + buffer zeroing en Surface.cpp, copybit MDP para strip 320×25)
 
 ### Energía
 

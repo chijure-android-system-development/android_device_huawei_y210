@@ -1,66 +1,3 @@
-diff --git a/libcamera/QualcommCameraHardware.cpp b/libcamera/QualcommCameraHardware.cpp
-index 9dbc95c..67d2b88 100644
---- a/libcamera/QualcommCameraHardware.cpp
-+++ b/libcamera/QualcommCameraHardware.cpp
-@@ -700,6 +700,8 @@ namespace android {
-         recording_callback rcb, void *ruser)
-     {
-         LOGV("startPreview E");
-+        LOGI("spdq: qcamera startPreviewInternal enter state=%s previewHeap=%p previewCb=%p recordingCb=%p",
-+             getCameraStateStr(mCameraState), mPreviewHeap.get(), pcb, rcb);
- 
-         if (mCameraState == QCS_PREVIEW_IN_PROGRESS) {
-             LOGE("startPreview is already in progress, doing nothing.");
-@@ -728,11 +730,13 @@ namespace android {
-         if (mCameraState != QCS_IDLE) {
-             LOGE("startPreview X Camera state is %s, expecting QCS_IDLE!",
-                 getCameraStateStr(mCameraState));
-+            LOGE("spdq: qcamera startPreviewInternal bad-state=%s", getCameraStateStr(mCameraState));
-             return INVALID_OPERATION;
-         }
- 
-         if (!initPreview()) {
-             LOGE("startPreview X initPreview failed.  Not starting preview.");
-+            LOGE("spdq: qcamera startPreviewInternal initPreview failed");
-             return UNKNOWN_ERROR;
-         }
- 
-@@ -744,6 +748,7 @@ namespace android {
-         mCameraState = QCS_INTERNAL_PREVIEW_REQUESTED;
-         camera_ret_code_type qret =
-             LINK_camera_start_preview(camera_cb, this);
-+        LOGI("spdq: qcamera startPreviewInternal camera_start_preview qret=%d", qret);
-         if (qret == CAMERA_SUCCESS) {
-             while(mCameraState != QCS_PREVIEW_IN_PROGRESS &&
-                   mCameraState != QCS_ERROR) {
-@@ -757,6 +762,10 @@ namespace android {
-         }
- 
-         LOGV("startPreview X");
-+        LOGI("spdq: qcamera startPreviewInternal exit state=%s ret=%d previewHeap=%p",
-+             getCameraStateStr(mCameraState),
-+             (mCameraState == QCS_PREVIEW_IN_PROGRESS ? NO_ERROR : UNKNOWN_ERROR),
-+             mPreviewHeap.get());
-         return mCameraState == QCS_PREVIEW_IN_PROGRESS ?
-             NO_ERROR : UNKNOWN_ERROR;
-     }
-@@ -804,9 +813,12 @@ namespace android {
-     {
-         Mutex::Autolock l(&mLock);
-         Mutex::Autolock stateLock(&mStateLock);
--        return startPreviewInternal(pcb, puser,
--                                    mRecordingCallback,
--                                    mRecordingCallbackCookie);
-+        LOGI("spdq: qcamera startPreview enter state=%s", getCameraStateStr(mCameraState));
-+        status_t err = startPreviewInternal(pcb, puser,
-+                                            mRecordingCallback,
-+                                            mRecordingCallbackCookie);
-+        LOGI("spdq: qcamera startPreview exit err=%d state=%s", err, getCameraStateStr(mCameraState));
-+        return err;
-     }
- 
-     void QualcommCameraHardware::stopPreview() {
-
 diff --git a/libcopybit/copybit.cpp b/libcopybit/copybit.cpp
 index fc52be1..ef37a27 100644
 --- a/libcopybit/copybit.cpp
@@ -143,3 +80,36 @@ index fc52be1..ef37a27 100644
              set_rects(ctx, req, dst_rect, src_rect, &clip);
  
              if (req->src_rect.w<=0 || req->src_rect.h<=0)
+diff --git a/libcopybit/copybit.cpp b/libcopybit/copybit.cpp
+index ef37a27..cff0dfc 100644
+--- a/libcopybit/copybit.cpp
++++ b/libcopybit/copybit.cpp
+@@ -18,6 +18,7 @@
+ #define LOG_TAG "copybit"
+
+ #include <cutils/log.h>
++#include <cutils/properties.h>
+
+ #include <linux/msm_mdp.h>
+ #include <linux/fb.h>
+@@ -389,6 +390,20 @@ static int stretch_copybit(
+     struct copybit_context_t* ctx = (struct copybit_context_t*)dev;
+     int status = 0;
+     if (ctx) {
++        // Workaround: MDP fails blitting the status bar strip (320x25 at y=0),
++        // leaving stale pixels. Return -EINVAL to force SF software compositor.
++        // Controlled by debug.copybit.disable_statusbar (default "1" = active).
++        if (dst->h <= 26) {
++            static int sDisableSB = -1;
++            if (sDisableSB < 0) {
++                char prop[PROPERTY_VALUE_MAX];
++                property_get("debug.copybit.disable_statusbar", prop, "1");
++                sDisableSB = atoi(prop);
++            }
++            if (sDisableSB)
++                return -EINVAL;
++        }
++
+         struct {
+             uint32_t count;
+             struct mdp_blit_req req[12];

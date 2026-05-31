@@ -199,14 +199,12 @@ diff --git a/media/libmediaplayerservice/StagefrightRecorder.cpp b/media/libmedi
 index e0ba2902ff0..f2239977c5e 100755
 --- a/media/libmediaplayerservice/StagefrightRecorder.cpp
 +++ b/media/libmediaplayerservice/StagefrightRecorder.cpp
-@@ -1033,8 +1033,13 @@ status_t StagefrightRecorder::setupCameraSource() {
+@@ -1033,8 +1033,11 @@ status_t StagefrightRecorder::setupCameraSource() {
      // Check on video frame size
      int frameWidth = 0, frameHeight = 0;
      newCameraParams.getPreviewSize(&frameWidth, &frameHeight);
 -    if (frameWidth  < 0 || frameWidth  != mVideoWidth ||
 -        frameHeight < 0 || frameHeight != mVideoHeight) {
-+    LOGI("StagefrightRecorder: videoSize=%dx%d actual previewSize=%dx%d",
-+            mVideoWidth, mVideoHeight, frameWidth, frameHeight);
 +    // Allow (-1,-1) when the camera HAL returns empty parameters (e.g., on
 +    // msm7x27 after a stop/restart cycle in setPreviewDisplay); the preview
 +    // is already confirmed working so treat missing size as non-fatal.
@@ -388,7 +386,7 @@ index 1d6da32e333..e101eb93730 100644
                          log("interface=" + interfaceName + " ipAddress=" + ipAddress
                              + " gateway=" + gatewayAddress + " DNS1=" + dnsServers[0]
 diff --git a/telephony/java/com/android/internal/telephony/QualcommNoSimReadyRIL.java b/telephony/java/com/android/internal/telephony/QualcommNoSimReadyRIL.java
-index bdc5ba4c936..fcaa75c5487 100644
+index bdc5ba4c936..2be03988797 100644
 --- a/telephony/java/com/android/internal/telephony/QualcommNoSimReadyRIL.java
 +++ b/telephony/java/com/android/internal/telephony/QualcommNoSimReadyRIL.java
 @@ -285,7 +285,9 @@ public class QualcommNoSimReadyRIL extends RIL implements CommandsInterface {
@@ -399,29 +397,26 @@ index bdc5ba4c936..fcaa75c5487 100644
 +            // QCRIL variants disagree on 1037. Some report it as EXIT_ECBM,
 +            // others as DATA_NETWORK_STATE_CHANGED. We treat it as void.
 +            case 1037: ret = responseVoid(p); break;
- 
+
              default:
                  throw new RuntimeException("Unrecognized unsol response: " + response);
-@@ -591,7 +593,11 @@ public class QualcommNoSimReadyRIL extends RIL implements CommandsInterface {
+@@ -591,7 +593,8 @@ public class QualcommNoSimReadyRIL extends RIL implements CommandsInterface {
                  break;
              case 1032:
                  break;
 -            case 1033:
-+            case 1033: // QCRIL: DATA_NETWORK_STATE_CHANGED
-+            case 1037: // QCRIL variant: may also signal data network state changed
-+                if (RILJ_LOGD) unsljLog(response);
-+                mNetworkStateRegistrants
-+                    .notifyRegistrants(new AsyncResult(null, null, null));
++            case 1033: // QCRIL: DATA_NETWORK_STATE_CHANGED fires simultaneously with 1002
++            case 1037: // same - notifyRegistrants here causes double-poll vs case 1002
                  break;
              case 1034:
                  break;
-@@ -599,8 +605,6 @@ public class QualcommNoSimReadyRIL extends RIL implements CommandsInterface {
+@@ -599,8 +602,6 @@ public class QualcommNoSimReadyRIL extends RIL implements CommandsInterface {
                  break;
              case 1036:
                  break;
 -            case 1037:
 -                break;
- 
+
          }
      }
 @@ -609,7 +613,7 @@ public class QualcommNoSimReadyRIL extends RIL implements CommandsInterface {
@@ -585,3 +580,89 @@ index bf72c381d95..e88aa28d734 100644
  
          if (mRequestedApnType.equals(Phone.APN_TYPE_DEFAULT)) {
              if (canSetPreferApn && preferredApn != null) {
+diff --git a/services/java/com/android/server/StatusBarManagerService.java b/services/java/com/android/server/StatusBarManagerService.java
+index 51144fc20cf..a3aaafe5097 100644
+--- a/services/java/com/android/server/StatusBarManagerService.java
++++ b/services/java/com/android/server/StatusBarManagerService.java
+@@ -181,6 +181,16 @@ public class StatusBarManagerService extends IStatusBarService.Stub
+                 throw new SecurityException("invalid status bar icon slot: " + slot);
+             }
+
++            // Skip if icon data is unchanged — avoids redundant mBar calls.
++            // Must check BEFORE updating mIcons: updating with default visible=false
++            // and then skipping mBar would desync mIcons vs mBar visibility state,
++            // causing setIconVisibility(false) to silently fail (ghost icons).
++            StatusBarIcon existing = mIcons.getIcon(index);
++            if (existing != null && existing.iconPackage.equals(iconPackage)
++                    && existing.iconId == iconId && existing.iconLevel == iconLevel) {
++                return;
++            }
++
+             StatusBarIcon icon = new StatusBarIcon(iconPackage, iconId, iconLevel);
+             //Slog.d(TAG, "setIcon slot=" + slot + " index=" + index + " icon=" + icon);
+             mIcons.setIcon(index, icon);
+diff --git a/libs/surfaceflinger_client/Surface.cpp b/libs/surfaceflinger_client/Surface.cpp
+index 017e94c94fa..94e14d809e0 100644
+--- a/libs/surfaceflinger_client/Surface.cpp
++++ b/libs/surfaceflinger_client/Surface.cpp
+@@ -25,6 +25,7 @@
+ #include <utils/threads.h>
+ #include <utils/CallStack.h>
+ #include <utils/Log.h>
++#include <cutils/properties.h>
+
+ #include <binder/IPCThreadState.h>
+ #include <binder/IMemory.h>
+@@ -949,11 +950,30 @@ status_t Surface::lock(SurfaceInfo* other, Region* dirtyIn, bool blocking)
+
+             // figure out if we can copy the frontbuffer back
+             const sp<GraphicBuffer>& frontBuffer(mPostedBuffer);
+-            const bool canCopyBack = (frontBuffer != 0 &&
++            bool canCopyBack = (frontBuffer != 0 &&
+                     backBuffer->width  == frontBuffer->width &&
+                     backBuffer->height == frontBuffer->height &&
+                     backBuffer->format == frontBuffer->format &&
+                     !(mFlags & ISurfaceComposer::eDestroyBackbuffer));
++            // Workaround: copy-back leaves ghost pixels on status-bar-sized
++            // surfaces (320x25). The status bar background drawable has alpha=0
++            // transparent areas; without copy-back those expose stale buffer
++            // content from two frames ago.  Fix: disable copy-back AND zero the
++            // back buffer so transparent pixels render as black, not as ghosts.
++            // Controlled by debug.surface.sb_nocopyback (default "1" = active).
++            bool sbNoCopyback = false;
++            if (backBuffer->height <= 26) {
++                static int sNoCopyback = -1;
++                if (sNoCopyback < 0) {
++                    char prop[PROPERTY_VALUE_MAX];
++                    property_get("debug.surface.sb_nocopyback", prop, "1");
++                    sNoCopyback = atoi(prop);
++                }
++                if (sNoCopyback) {
++                    canCopyBack = false;
++                    sbNoCopyback = true;
++                }
++            }
+
+             // the dirty region we report to surfaceflinger is the one
+             // given by the user (as opposed to the one *we* return to the
+@@ -979,10 +999,18 @@ status_t Surface::lock(SurfaceInfo* other, Region* dirtyIn, bool blocking)
+             status_t res = backBuffer->lock(
+                     GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN,
+                     newDirtyRegion.bounds(), &vaddr);
+-            
+-            LOGW_IF(res, "failed locking buffer (handle = %p)", 
++
++            LOGW_IF(res, "failed locking buffer (handle = %p)",
+                     backBuffer->handle);
+
++            // Zero the back buffer so transparent drawable areas show black
++            // instead of stale content from two frames ago.
++            if (res == NO_ERROR && sbNoCopyback && vaddr) {
++                memset(vaddr, 0,
++                       backBuffer->stride * backBuffer->height *
++                       bytesPerPixel(backBuffer->format));
++            }
++
+             mLockedBuffer = backBuffer;
+             other->w      = backBuffer->width;
+             other->h      = backBuffer->height;
