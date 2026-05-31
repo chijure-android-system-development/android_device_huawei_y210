@@ -29,8 +29,8 @@ Cuando algo está en **Parcial/No/Pendiente**, adjuntar logs usando
 
 ## Matriz (inventario + estado)
 
-Estado “base” tomado del resumen de `README.md` y los notes del device tree.
-Actualizar esta tabla cada vez que un bug se cierre con evidencia.
+Estado actualizado 2026-05-31. Validado con `test_y210.sh --fast`: 54 PASS / 0 FAIL.
+Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 
 ### Arranque / sistema
 
@@ -106,7 +106,7 @@ Actualizar esta tabla cada vez que un bug se cierre con evidencia.
 - XTRA (efemérides asistidas): **OK** (41 partes inyectadas al arranque)
 - NTP / UTC injection: **OK**
 - AGPS (UMTS SLP): **OK**
-- Fix real con satélites: **Pendiente** (requiere prueba al aire libre)
+- Fix real con satélites: **Pendiente** (requiere prueba al aire libre; motor RPC/XTRA/AGPS OK en logcat)
 
 Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 
@@ -174,6 +174,18 @@ Ejecutar estos desde host:
 - Audio:
   - `adb shell dumpsys media.audio_flinger`
   - `adb shell getprop | grep -i audio`
+
+## Smoke test automatizado
+
+```bash
+# Ejecutar desde raíz del árbol CM7 con dispositivo conectado:
+bash device/huawei/y210/tools/test_y210.sh            # completo
+bash device/huawei/y210/tools/test_y210.sh --fast     # omite suspensión
+bash device/huawei/y210/tools/test_y210.sh --section camera
+
+# Resultado esperado (CM7, con SIM): 54 PASS / 0 FAIL / 5 SKIP / 24 MANUAL
+# Log detallado: /tmp/test_y210_YYYYMMDD_HHMMSS.log
+```
 
 ## Recolección “log general” (un solo comando)
 

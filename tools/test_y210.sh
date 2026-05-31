@@ -219,7 +219,9 @@ if section camera "CÁMARA"; then
     if [[ "$_codec" == *"h263"* ]]; then pass "media_profiles usa h263 (SW encoder OK)"; \
     else skip "media_profiles codec" "='$_codec' (esperado h263)"; fi
     # Lanzar y verificar
-    adb_sh "am kill com.android.camera" 2>/dev/null || true
+    # am kill/force-stop no existen en Gingerbread 2.3 — usar pkill
+    _campid=$(adb_sh "ps 2>/dev/null | grep 'android.camera' | grep -v grep | awk '{print \$2}' | head -1")
+    [[ -n "$_campid" ]] && adb_sh "kill $_campid" 2>/dev/null || true
     adb_sh "logcat -c" 2>/dev/null || true
     adb_sh "am start -n com.android.camera/.Camera" > /dev/null 2>&1
     sleep 4
@@ -229,7 +231,9 @@ if section camera "CÁMARA"; then
     _prev=$(adb_sh "logcat -d 2>/dev/null" | grep -c "startPreview.*rc=0" 2>/dev/null || echo 0)
     if [[ "$_prev" -gt 0 ]]; then pass "startPreview rc=0 en logcat"; \
     else skip "startPreview logcat" "no hay log reciente (OK si ya estaba corriendo)"; fi
-    adb_sh "am kill com.android.camera" 2>/dev/null || true
+    # am kill/force-stop no existen en Gingerbread 2.3 — usar pkill
+    _campid=$(adb_sh "ps 2>/dev/null | grep 'android.camera' | grep -v grep | awk '{print \$2}' | head -1")
+    [[ -n "$_campid" ]] && adb_sh "kill $_campid" 2>/dev/null || true
     manual "Preview foto en color"   "verifica: 640×480, colores reales, portrait"
     manual "Captura de foto"         "toma foto — verifica JPEG en galería"
     manual "Switch a modo video"     "pulsa botón video — verifica preview 352×288"
