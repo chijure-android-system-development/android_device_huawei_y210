@@ -84,9 +84,10 @@ diff --git a/libcopybit/copybit.cpp b/libcopybit/copybit.cpp
 index ef37a27..cff0dfc 100644
 --- a/libcopybit/copybit.cpp
 +++ b/libcopybit/copybit.cpp
-@@ -18,6 +18,7 @@
+@@ -18,6 +18,9 @@
  #define LOG_TAG "copybit"
 
++#include <stdlib.h>
  #include <cutils/log.h>
 +#include <cutils/properties.h>
 
@@ -113,3 +114,24 @@ index ef37a27..cff0dfc 100644
          struct {
              uint32_t count;
              struct mdp_blit_req req[12];
+diff --git a/libcopybit/Android.mk b/libcopybit/Android.mk
+--- a/libcopybit/Android.mk
++++ b/libcopybit/Android.mk
+@@ -23,7 +23,7 @@ ifeq ($(TARGET_BOARD_PLATFORM),msm7k)
+ include $(CLEAR_VARS)
+ LOCAL_MODULE_TAGS := optional
+ LOCAL_PRELINK_MODULE := false
+ LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+-LOCAL_SHARED_LIBRARIES := liblog
++LOCAL_SHARED_LIBRARIES := liblog libcutils
+ LOCAL_SRC_FILES := copybit.cpp
+ LOCAL_MODULE := copybit.msm7k
+ LOCAL_C_INCLUDES += hardware/msm7k/libgralloc
+@@ -34,7 +34,7 @@ ifeq ($(TARGET_BOARD_PLATFORM),qsd8k)
+ include $(CLEAR_VARS)
+ LOCAL_PRELINK_MODULE := false
+ LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+-LOCAL_SHARED_LIBRARIES := liblog
++LOCAL_SHARED_LIBRARIES := liblog libcutils
+ LOCAL_SRC_FILES := copybit.cpp
+ LOCAL_MODULE := copybit.qsd8k
