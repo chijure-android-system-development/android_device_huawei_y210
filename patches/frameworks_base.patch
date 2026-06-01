@@ -588,7 +588,7 @@ index 51144fc20cf..a3aaafe5097 100644
                  throw new SecurityException("invalid status bar icon slot: " + slot);
              }
 
-+            // Skip if icon data is unchanged — avoids redundant mBar calls.
++            // Skip if icon data is unchanged - avoids redundant mBar calls.
 +            // Must check BEFORE updating mIcons: updating with default visible=false
 +            // and then skipping mBar would desync mIcons vs mBar visibility state,
 +            // causing setIconVisibility(false) to silently fail (ghost icons).
