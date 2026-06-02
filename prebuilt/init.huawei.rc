@@ -360,15 +360,15 @@ on property:ro.baseband="unknown"
 service pcm-bridge /system/bin/pcm-bridge /dev/smd7 /dev/ttyGS1
 #/*DTS2011111602662 wangdong 20111117 end >*/
 
-# service qmiproxy /system/bin/qmiproxy
-#     user radio
-#     group radio
-#     disabled
+service qmiproxy /system/bin/qmiproxy
+    user radio
+    group radio qcom_oncrpc net_raw
+    disabled
 
-# service qmuxd /system/bin/qmuxd
-#     user radio
-#     group radio
-#     disabled
+service qmuxd /system/bin/qmuxd
+    user radio
+    group radio qcom_oncrpc net_raw
+    disabled
 
 service netmgrd /system/bin/netmgrd
     disabled
