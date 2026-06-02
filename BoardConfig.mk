@@ -18,8 +18,6 @@ ARCH_ARM_HAVE_TLS_REGISTER := true
 TARGET_BOOTLOADER_BOARD_NAME := y210
 TARGET_OTA_ASSERT_DEVICE := y210,hwy210
 
-# Legacy audio stack (CM9/ICS on msm7k).
-BOARD_USES_AUDIO_LEGACY := true
 
 # Host build hygiene: disable SREC grammar generation on modern hosts.
 # This avoids building `grxmlcompile` (OpenFst-based) which is not needed
