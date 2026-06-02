@@ -33,6 +33,7 @@
 
 // hardware specific functions
 #include "AudioHardware.h"
+#include <media/AudioParameter.h>
 #include <media/AudioRecord.h>
 
 #undef  COMBO_DEVICE_SUPPORTED // Headset speaker combo device not supported on this target
