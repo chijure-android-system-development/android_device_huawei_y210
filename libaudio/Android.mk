@@ -9,7 +9,12 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     libmedia
 
-LOCAL_STATIC_LIBRARIES := libaudiopolicybase
+LOCAL_STATIC_LIBRARIES := libmedia_helper
+
+LOCAL_WHOLE_STATIC_LIBRARIES := libaudiopolicy_legacy
+
+LOCAL_C_INCLUDES += \
+    hardware/libhardware_legacy/include
 
 LOCAL_MODULE:= libaudiopolicy
 

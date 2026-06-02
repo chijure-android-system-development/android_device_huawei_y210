@@ -173,6 +173,19 @@ on post-fs-data
     # QMI daemons (qmuxd/qmiproxy) expect this directory for their local sockets.
     mkdir /data/radio 0770 radio radio
 
+    # AR6K WiFi firmware staging — copy board-specific caldata before ar6000.ko loads.
+    # wlan_detect does not recognize MSM7225A_Y210 board_id so we do it here.
+    mkdir /data/misc/wifi 0770 wifi wifi
+    mkdir /data/misc/wifi/load 0770 wifi wifi
+    copy /system/wifi/ath6k/caldata_MSM7225A_Y210.bin /data/misc/wifi/load/caldata.bin
+    copy /system/wifi/ath6k/athwlan.bin               /data/misc/wifi/load/athwlan.bin
+    copy /system/wifi/ath6k/otp.bin                   /data/misc/wifi/load/otp.bin
+    copy /system/wifi/ath6k/data.patch.hw3_0.bin      /data/misc/wifi/load/data.patch.hw3_0.bin
+    chown wifi wifi /data/misc/wifi/load/caldata.bin
+    chown wifi wifi /data/misc/wifi/load/athwlan.bin
+    chown wifi wifi /data/misc/wifi/load/otp.bin
+    chown wifi wifi /data/misc/wifi/load/data.patch.hw3_0.bin
+
 on property:sys.boot_completed=1
     # Fix oncrpc node ownership/permissions after system is fully up
     # toolbox `chown` expects user.group (or numeric ids). Use AID_QCOM_ONCRPC=3006.
@@ -347,17 +360,15 @@ on property:ro.baseband="unknown"
 service pcm-bridge /system/bin/pcm-bridge /dev/smd7 /dev/ttyGS1
 #/*DTS2011111602662 wangdong 20111117 end >*/
 
-service qmiproxy /system/bin/qmiproxy
-    class main
-    user radio
-    group radio qcom_oncrpc diag inet
-    disabled
+# service qmiproxy /system/bin/qmiproxy
+#     user radio
+#     group radio
+#     disabled
 
-service qmuxd /system/bin/qmuxd
-    class main
-    user radio
-    group radio qcom_oncrpc diag inet
-    disabled
+# service qmuxd /system/bin/qmuxd
+#     user radio
+#     group radio
+#     disabled
 
 service netmgrd /system/bin/netmgrd
     disabled

@@ -5,7 +5,7 @@ USE_CAMERA_STUB := false
 
 TARGET_NO_BOOTLOADER := true
 
-TARGET_BOARD_PLATFORM := msm7k
+TARGET_BOARD_PLATFORM := msm7x27a
 TARGET_BOARD_PLATFORM_GPU := qcom-adreno200
 
 TARGET_NO_RADIOIMAGE := true
@@ -17,6 +17,9 @@ ARCH_ARM_HAVE_TLS_REGISTER := true
 
 TARGET_BOOTLOADER_BOARD_NAME := y210
 TARGET_OTA_ASSERT_DEVICE := y210,hwy210
+
+# Legacy audio stack (CM9/ICS on msm7k).
+BOARD_USES_AUDIO_LEGACY := true
 
 # Host build hygiene: disable SREC grammar generation on modern hosts.
 # This avoids building `grxmlcompile` (OpenFst-based) which is not needed
@@ -40,22 +43,23 @@ TARGET_SPECIFIC_HEADER_PATH := device/huawei/y210/include
 #recovery
 BOARD_LDPI_RECOVERY := true
 BOARD_HAS_JANKY_BACKBUFFER := true
-BOARD_CUSTOM_GRAPHICS           := ../../../device/huawei/y210/recovery/graphics.c
+#BOARD_CUSTOM_GRAPHICS           := ../../../device/huawei/y210/recovery/graphics.c
 
 
 # OpenGL drivers config file path
 BOARD_EGL_CFG := device/huawei/y210/prebuilt/system/lib/egl/egl.cfg
 BOARD_USES_QCOM_HARDWARE := true
-BOARD_USE_QCOM_PMEM := true
+TARGET_USES_GENLOCK := true
 COMMON_GLOBAL_CFLAGS += -DQCOM_HARDWARE
 BOARD_USES_QCOM_LIBRPC := true
 BOARD_USES_QCOM_LIBS := true
+BOARD_USE_QCOM_PMEM := true
 COMMON_GLOBAL_CFLAGS += -DTARGET_MSM7x27A -DTARGET_MSM7x27
 # PARCHE-E: comentar la siguiente línea para desactivar copybit y aislar si
 # la repetición horizontal la causa el MDP blit path vs el render directo.
 # Reactivar una vez descartado o confirmado.
 TARGET_LIBAGL_USE_GRALLOC_COPYBITS := true
-#TARGET_LIBAGL_USE_GRALLOC_COPYBITS := false  # PARCHE-E activo: descomentar esta y comentar la de arriba
+TARGET_GRALLOC_USES_ASHMEM := true
 
 WITH_JIT := true
 ENABLE_JSC_JIT := true
@@ -77,11 +81,12 @@ BOARD_FM_DEVICE := qcom
 
 # Wi-Fi
 BOARD_WPA_SUPPLICANT_DRIVER := WEXT
-BOARD_WLAN_DEVICE           := ar6000
+BOARD_WLAN_DEVICE           := ath6kl
 WIFI_DRIVER_MODULE_PATH     := /system/wifi/ar6000.ko
 WIFI_DRIVER_MODULE_ARG      := ""
 WIFI_DRIVER_MODULE_NAME     := ar6000
-WPA_SUPPLICANT_VERSION      := VER_0_6_X
+BOARD_WPA_SUPPLICANT_PRIVATE_LIB := lib_driver_cmd_ath6kl
+WPA_SUPPLICANT_VERSION      := VER_0_8_X
 WIFI_PRE_LOADER             := wlan_detect
 
 # Partition sizes from device /proc/mtd (bytes)
@@ -93,16 +98,15 @@ BOARD_CACHEIMAGE_PARTITION_SIZE := 0x03A00000
 BOARD_FLASH_BLOCK_SIZE := 131072
 
 # Kernel 
-# TARGET_KERNEL_SOURCE := kernel/huawei/y210
-# TARGET_KERNEL_CONFIG := cyanogen_y210_defconfig
+TARGET_KERNEL_SOURCE := kernel/huawei/y210
+TARGET_KERNEL_CONFIG := hw_msm7x27a_defconfig
 BOARD_KERNEL_CMDLINE := console=ttyDCC0 androidboot.hardware=huawei
 BOARD_KERNEL_BASE := 0x00200000
 BOARD_KERNEL_PAGESIZE := 4096
 
-TARGET_PREBUILT_KERNEL := device/huawei/y210/kernel
 BOARD_HAS_EXTRA_SYS_PROPS := true
 
-TARGET_RECOVERY_INITRC := device/huawei/y210/recovery/etc/init.rc
+# TARGET_RECOVERY_INITRC := device/huawei/y210/recovery/etc/init.rc
 # BOARD_DATA_DEVICE := /dev/block/mmcblk0p13
 # BOARD_DATA_FILESYSTEM := ext4
 # BOARD_DATA_FILESYSTEM_OPTIONS := rw
@@ -120,6 +124,6 @@ TARGET_USE_CUSTOM_LUN_FILE_PATH := /sys/devices/platform/usb_mass_storage/lun
 TARGET_USE_CUSTOM_SECOND_LUN_NUM := 2
 BOARD_VOLD_MAX_PARTITIONS := 19
 BOARD_VOLD_EMMC_SHARES_DEV_MAJOR := true
-BOARD_UMS_LUNFILE := "/sys/devices/platform/usb_mass_storage/lun0/file"
+BOARD_UMS_LUNFILE := /sys/devices/platform/usb_mass_storage/lun0/file
 
 COMMON_GLOBAL_CFLAGS += -DREFRESH_RATE=60

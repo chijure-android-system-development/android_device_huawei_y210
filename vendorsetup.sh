@@ -17,10 +17,6 @@
 # This file is executed by build/envsetup.sh, and can use anything
 # defined in envsetup.sh.
 #
-# In particular, you can add lunch options with the add_lunch_combo
-# function: add_lunch_combo generic-eng
-# Product makefile lives at vendor/cyanogen/products/cyanogen_y210.mk
-# (kept in-tree for this bring-up). No need to copy at envsetup time.
-
-add_lunch_combo cyanogen_y210-userdebug
-add_lunch_combo cyanogen_y210-eng
+# Add CM9 lunch options for the Y210 device.
+add_lunch_combo cm_y210-userdebug
+add_lunch_combo cm_y210-eng

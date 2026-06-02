@@ -31,6 +31,13 @@ extern "C" {
 }
 
 namespace android {
+// CM9/ICS keeps the legacy audio HAL interfaces in the android_audio_legacy
+// namespace. Import only the legacy HAL types we implement, and use an explicit
+// alias for the legacy AudioSystem to avoid clashing with android::AudioSystem.
+using android_audio_legacy::AudioHardwareBase;
+using android_audio_legacy::AudioStreamOut;
+using android_audio_legacy::AudioStreamIn;
+typedef android_audio_legacy::AudioSystem AudioSystemLegacy;
 
 // ----------------------------------------------------------------------------
 // Kernel driver interface
@@ -79,9 +86,9 @@ const uint32_t inputSamplingRates[] = {
 #define AUDIO_HW_OUT_LATENCY_MS 80                          // Additional latency introduced by audio DSP and hardware in ms
 
 #define AUDIO_HW_IN_SAMPLERATE 8000                         // Default audio input sample rate
-#define AUDIO_HW_IN_CHANNELS (AudioSystem::CHANNEL_IN_MONO) // Default audio input channel mask
+#define AUDIO_HW_IN_CHANNELS (AudioSystemLegacy::CHANNEL_IN_MONO) // Default audio input channel mask
 #define AUDIO_HW_IN_BUFFERSIZE 2048                         // Default audio input buffer size
-#define AUDIO_HW_IN_FORMAT (AudioSystem::PCM_16_BIT)        // Default audio input sample format
+#define AUDIO_HW_IN_FORMAT (AudioSystemLegacy::PCM_16_BIT)        // Default audio input sample format
 
 //Internal structures definition
 struct eq_filter_type {
@@ -201,7 +208,7 @@ class AudioHardware : public  AudioHardwareBase {
 									uint32_t *channels,
 									uint32_t *sampleRate,
 									status_t *status,
-									AudioSystem::audio_in_acoustics acoustics);
+									AudioSystemLegacy::audio_in_acoustics acoustics);
 
 		virtual	void        closeOutputStream(AudioStreamOut* out);
 		virtual void        closeInputStream(AudioStreamIn* in);
@@ -253,8 +260,8 @@ class AudioHardware : public  AudioHardwareBase {
 
 				// must be 32-bit aligned - driver only seems to like 4800
 				virtual size_t      bufferSize() const { return 4800; }
-				virtual uint32_t    channels() const { return AudioSystem::CHANNEL_OUT_STEREO; }
-				virtual int         format() const { return AudioSystem::PCM_16_BIT; }
+				virtual uint32_t    channels() const { return AudioSystemLegacy::CHANNEL_OUT_STEREO; }
+				virtual int         format() const { return AudioSystemLegacy::PCM_16_BIT; }
 				virtual uint32_t    latency() const { return (1000*AUDIO_HW_NUM_OUT_BUF*(bufferSize()/frameSize()))/sampleRate()+AUDIO_HW_OUT_LATENCY_MS; }
 				virtual status_t    setVolume(float left, float right) { return INVALID_OPERATION; }
 				virtual ssize_t     write(const void* buffer, size_t bytes);
@@ -293,7 +300,7 @@ class AudioHardware : public  AudioHardwareBase {
 										int *pFormat,
 										uint32_t *pChannels,
 										uint32_t *pRate,
-										AudioSystem::audio_in_acoustics acoustics);
+										AudioSystemLegacy::audio_in_acoustics acoustics);
 				virtual size_t      bufferSize() const { return mBufferSize; }
 				virtual uint32_t    channels() const { return mChannels; }
 				virtual int         format() const { return mFormat; }
@@ -305,6 +312,8 @@ class AudioHardware : public  AudioHardwareBase {
 				virtual status_t    setParameters(const String8& keyValuePairs);
 				virtual String8     getParameters(const String8& keys);
 				virtual unsigned int getInputFramesLost() const { return 0; }
+				virtual status_t    addAudioEffect(effect_handle_t effect);
+				virtual status_t    removeAudioEffect(effect_handle_t effect);
 						uint32_t    devices() { return mDevices; }
 						int         state() const { return mState; }
 
@@ -320,7 +329,7 @@ class AudioHardware : public  AudioHardwareBase {
 				uint32_t       mChannels;
 				uint32_t       mSampleRate;
 				size_t         mBufferSize;
-				AudioSystem::audio_in_acoustics mAcoustics;
+				AudioSystemLegacy::audio_in_acoustics mAcoustics;
 				uint32_t       mDevices;
 				bool           mFirstread;
 		};

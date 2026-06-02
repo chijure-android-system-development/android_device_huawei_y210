@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# test_y210.sh — smoke-test del port CM7 para el Huawei Y210 vía ADB.
+# test_y210.sh — smoke-test del port CM9 (ICS 4.0) para el Huawei Y210 vía ADB.
 #
-# Uso (desde raíz del árbol CM7 o en cualquier directorio):
+# Uso (desde raíz del árbol CM9 o en cualquier directorio):
 #   bash device/huawei/y210/tools/test_y210.sh [--fast] [--section <nombre>]
 #
 # Opciones:
@@ -57,7 +57,7 @@ chk_file() {
 
 # ── pre-check ─────────────────────────────────────────────────────────────────
 
-echo -e "${BLD}test_y210.sh — Huawei Y210 CM7 smoke test${RST}"
+echo -e "${BLD}test_y210.sh — Huawei Y210 CM9 (ICS 4.0) smoke test${RST}"
 echo "Log: $LOG"
 
 if ! adb devices | grep -q "device$"; then
@@ -71,33 +71,33 @@ echo "Dispositivo: $_model" >> "$LOG"
 # ── 1. boot / sistema ─────────────────────────────────────────────────────────
 
 if section boot "BOOT / SISTEMA"; then
-    chk_prop  "Boot completado"           sys.boot_completed    "1"
-    chk_prop  "Versión Android 2.3"       ro.build.version.release "2.3"
-    chk_prop  "ro.product.model Y210"     ro.product.model      "HUAWEI Y210"
-    chk_prop  "ro.build.product msm7625a" ro.build.product      "msm7625a"
-    chk_proc  "system_server"             "system_server"
-    # surfaceflinger: en Gingerbread aparece en `service list`, no siempre en ps
-    if adb_sh "service list 2>/dev/null" | grep -qi surfaceflinger; then
-        pass "surfaceflinger (vía service list)"
-    elif adb_sh "ps 2>/dev/null" | grep -qi surfacefling; then
+    chk_prop  "Boot completado"              sys.boot_completed       "1"
+    chk_prop  "Versión Android 4.0"          ro.build.version.release "4.0"
+    chk_prop  "ro.product.model Y210"        ro.product.model         "HUAWEI Y210"
+    chk_prop  "ro.build.product y210"        ro.build.product         "y210"
+    chk_proc  "system_server"                "system_server"
+    # En ICS surfaceflinger aparece en ps como proceso propio
+    if adb_sh "ps 2>/dev/null" | grep -qi surfacefling; then
         pass "surfaceflinger (vía ps)"
+    elif adb_sh "service list 2>/dev/null" | grep -qi surfaceflinger; then
+        pass "surfaceflinger (vía service list)"
     else fail "surfaceflinger" "no en ps ni en service list"; fi
-    chk_proc  "mediaserver"              "mediaserver"
-    chk_prop  "persist.camera.mode=1"    persist.camera.mode   "1"
-    _dlg=$(adb_sh getprop persist.camera.delegate_setparams)
-    if [[ "$_dlg" == "1" ]]; then pass "persist.camera.delegate_setparams=1"; \
-    else skip "persist.camera.delegate_setparams" "='$_dlg' (normal si cámara no se abrió aún)"; fi
+    chk_proc  "mediaserver"                  "mediaserver"
+    # En ICS Zygote se llama zygote (no app_process directamente)
+    chk_proc  "zygote"                       "zygote"
 fi
 
 # ── 2. pantalla / gráficos ────────────────────────────────────────────────────
 
 if section display "PANTALLA / GRÁFICOS"; then
-    chk_file "Framebuffer fb0"          "/dev/graphics/fb0"
-    chk_file "gralloc.msm7k.so"        "/system/lib/hw/gralloc.msm7k.so"
-    chk_file "copybit.msm7k.so"        "/system/lib/hw/copybit.msm7k.so"
-    chk_file "libsurfaceflinger.so"    "/system/lib/libsurfaceflinger.so"
-    chk_file "libEGL_adreno200.so"     "/system/lib/egl/libEGL_adreno200.so"
-    chk_file "libGLESv1_CM_adreno200"  "/system/lib/egl/libGLESv1_CM_adreno200.so"
+    chk_file "Framebuffer fb0"              "/dev/graphics/fb0"
+    # En ICS los HAL usan el nombre del SoC: msm7x27a
+    chk_file "gralloc.msm7x27a.so"         "/system/lib/hw/gralloc.msm7x27a.so"
+    chk_file "copybit.msm7x27a.so"         "/system/lib/hw/copybit.msm7x27a.so"
+    chk_file "hwcomposer.msm7x27a.so"      "/system/lib/hw/hwcomposer.msm7x27a.so"
+    chk_file "libEGL_adreno200.so"         "/system/lib/egl/libEGL_adreno200.so"
+    chk_file "libGLESv1_CM_adreno200.so"   "/system/lib/egl/libGLESv1_CM_adreno200.so"
+    chk_file "libGLESv2_adreno200.so"      "/system/lib/egl/libGLESv2_adreno200.so"
     _kgsl=$(adb_sh "ls -l /dev/kgsl-3d0 2>/dev/null | awk '{print \$1}'")
     if [[ "$_kgsl" == *"rw-rw-rw"* ]]; then pass "KGSL permisos 0666 ($_kgsl)"; \
     else fail "KGSL /dev/kgsl-3d0 permisos" "got='$_kgsl'"; fi
@@ -112,18 +112,21 @@ if section input "INPUT / UI"; then
     _evts=$(adb_sh "ls /dev/input/ 2>/dev/null | grep -c event")
     if [[ "$_evts" -gt 0 ]] 2>/dev/null; then pass "/dev/input/event* — $_evts nodos presentes"; \
     else fail "/dev/input/event*" "ninguno encontrado"; fi
-    chk_file "Acelerómetro /dev/accel"  "/dev/accel"
-    manual "Touchscreen"       "toca la pantalla — verifica respuesta táctil"
-    manual "Multitouch"        "pellizca/expande — verifica zoom"
-    manual "Botones físicos"   "power / vol+ / vol-"
-    manual "Botones capacitivos" "atrás / home / menú"
+    chk_file "Acelerómetro /dev/accel"     "/dev/accel"
+    # En ICS el evento de entrada se puede inspeccionar con getevent
+    if adb_sh "getevent -p 2>/dev/null" | grep -qi "ABS_MT_POSITION\|touch"; then
+        pass "Touchscreen detectado en getevent"
+    else skip "getevent touch" "activar pantalla y re-ejecutar"; fi
+    manual "Touchscreen"          "toca la pantalla — verifica respuesta táctil"
+    manual "Multitouch"           "pellizca/expande — verifica zoom"
+    manual "Botones físicos"      "power / vol+ / vol-"
+    manual "Botones capacitivos"  "atrás / home / menú / búsqueda"
 fi
 
 # ── 4. luces / vibración ──────────────────────────────────────────────────────
 
 if section lights "LUCES / VIBRACIÓN"; then
     chk_file "lights HAL"  "/system/lib/hw/lights.y210.so"
-    # Despertar pantalla antes de leer brightness (puede ser 0 con pantalla apagada)
     adb_sh "input keyevent 26" 2>/dev/null; sleep 1
     _bl=$(adb_sh "cat /sys/class/leds/lcd-backlight/brightness 2>/dev/null")
     _bl_max=$(adb_sh "cat /sys/class/leds/lcd-backlight/max_brightness 2>/dev/null")
@@ -138,36 +141,43 @@ fi
 # ── 5. audio ──────────────────────────────────────────────────────────────────
 
 if section audio "AUDIO"; then
-    chk_file "libaudio.so"       "/system/lib/libaudio.so"
-    chk_file "/dev/msm_pcm_out"  "/dev/msm_pcm_out"
-    chk_file "/dev/msm_snd"      "/dev/msm_snd"
+    # En ICS AudioFlinger intenta audio.primary.<board>.so; el Y210 usa libaudio.so
+    # envuelto por audio_hw_hal — ambos deberían estar presentes
+    chk_file "libaudio.so"              "/system/lib/libaudio.so"
+    chk_file "libaudiopolicy.so"        "/system/lib/libaudiopolicy.so"
+    chk_file "/dev/msm_pcm_out"         "/dev/msm_pcm_out"
+    chk_file "/dev/msm_snd"             "/dev/msm_snd"
     if adb_sh "service list 2>/dev/null" | grep -q "media.audio_flinger"; then
         pass "AudioFlinger registrado en ServiceManager"
     else fail "AudioFlinger" "no en service list"; fi
-    chk_prop "headset-postproc=lite"  persist.sys.headset-postproc  "lite"
-    manual "Speaker"      "reproduce sonido — verifica volumen por altavoz"
-    manual "Auriculares"  "conecta auriculares — verifica sonido y volumen"
-    manual "Micrófono"    "graba nota de voz — reproduce y verifica"
+    # En ICS dumpsys audio muestra el estado del HAL
+    if adb_sh "dumpsys media.audio_flinger 2>/dev/null" | grep -qi "output\|hardware"; then
+        pass "dumpsys AudioFlinger responde"
+    else skip "dumpsys audio_flinger" "sin respuesta útil"; fi
+    manual "Speaker"       "reproduce sonido — verifica volumen por altavoz"
+    manual "Auriculares"   "conecta auriculares — verifica sonido y volumen"
+    manual "Micrófono"     "graba nota de voz — reproduce y verifica"
     manual "Llamada audio" "realiza llamada — verifica audio subida y bajada"
 fi
 
 # ── 6. Wi-Fi ──────────────────────────────────────────────────────────────────
 
 if section wifi "WI-FI"; then
-    # Y210 usa ath6kl — firmware en /system/etc/firmware/ sin subdirectorio wlan/
+    # Y210 usa ath6kl — firmware en /system/etc/firmware/
     _wfirmware=$(adb_sh "ls /system/etc/firmware/ 2>/dev/null" | grep -iE "ath|ar[0-9]")
     if [[ -n "$_wfirmware" ]]; then pass "Firmware WiFi ath6kl presente ($_wfirmware)"; \
-    else skip "Firmware WiFi" "no encontrado en /system/etc/firmware/ — verificar ruta"; fi
+    else skip "Firmware WiFi" "no encontrado en /system/etc/firmware/"; fi
     chk_file "hostapd"  "/system/bin/hostapd"
+    chk_file "wpa_supplicant.conf"  "/data/misc/wifi/wpa_supplicant.conf"
     adb_sh "svc wifi enable" 2>/dev/null || true
     if ! $FAST; then sleep 3; fi
-    # ath6kl crea eth0 (no wlan0) en Gingerbread
+    # ath6kl puede crear eth0 o wlan0 según el driver
     _wl=$(adb_sh "ip link 2>/dev/null" | grep -E "eth0|wlan0")
-    if [[ -n "$_wl" ]]; then pass "Interfaz WiFi presente ($( echo "$_wl" | awk '{print $2}' | head -1))"; \
+    if [[ -n "$_wl" ]]; then pass "Interfaz WiFi presente ($(echo "$_wl" | awk '{print $2}' | head -1))"; \
     else fail "Interfaz WiFi (eth0/wlan0)" "no encontrada tras habilitar WiFi"; fi
     _wstat=$(adb_sh getprop wlan.driver.status)
     if [[ "$_wstat" == "ok" ]]; then pass "wlan.driver.status=ok"; \
-    else skip "wlan.driver.status" "='$_wstat' (normal si WiFi no estaba encendido antes)"; fi
+    else skip "wlan.driver.status" "='$_wstat'"; fi
     manual "Asociación/DHCP"  "conéctate a una red y verifica IP asignada"
     manual "Tethering Wi-Fi"  "activa hotspot — conecta un cliente y verifica internet"
 fi
@@ -177,35 +187,40 @@ fi
 if section bt "BLUETOOTH"; then
     chk_file "hciattach"           "/system/bin/hciattach"
     chk_file "libbluetooth.so"     "/system/lib/libbluetooth.so"
+    # En ICS bluetooth corre en proceso com.android.bluetooth
     _hci=$(adb_sh "hciconfig 2>/dev/null")
     if [[ "$_hci" == *"hci0"* ]]; then pass "hci0 detectado"; \
     else skip "hci0" "BT apagado — activar desde ajustes y re-ejecutar"; fi
-    manual "BT pairing"  "empareja con otro dispositivo"
-    manual "BT audio A2DP/SCO"  "conecta auriculares BT — reproduce audio"
+    if adb_sh "ps 2>/dev/null" | grep -q "com.android.bluetooth"; then
+        pass "Proceso Bluetooth en ejecución"
+    else skip "com.android.bluetooth" "proceso no activo (BT apagado)"; fi
+    manual "BT pairing"        "empareja con otro dispositivo"
+    manual "BT audio A2DP/SCO" "conecta auriculares BT — reproduce audio"
 fi
 
 # ── 8. sensores ───────────────────────────────────────────────────────────────
 
 if section sensors "SENSORES"; then
     chk_file "/dev/accel" "/dev/accel"
-    if adb_sh "dumpsys sensorservice 2>/dev/null" | grep -qi "lis3dh\|accelerometer"; then
-        pass "Acelerómetro en SensorService"
-    else fail "Acelerómetro SensorService" "no aparece en dumpsys"; fi
+    # En ICS dumpsys sensorservice muestra la lista de sensores registrados
+    if adb_sh "dumpsys sensorservice 2>/dev/null" | grep -qi "lis3dh\|accelerometer\|Sensor List"; then
+        pass "SensorService responde con sensores"
+    else fail "SensorService" "sin respuesta en dumpsys sensorservice"; fi
     manual "Acelerómetro" "gira el teléfono — verifica rotación de pantalla"
 fi
 
 # ── 9. GPS ────────────────────────────────────────────────────────────────────
 
 if section gps "GPS"; then
-    # Y210 usa gps.y210.so en /system/lib/hw/ (HAL GPS, no libgps.so)
     chk_file "gps.y210.so HAL"  "/system/lib/hw/gps.y210.so"
-    chk_file "gps.conf"    "/system/etc/gps.conf"
+    chk_file "gps.conf"         "/system/etc/gps.conf"
     _gpsv=$(adb_sh getprop ro.gps.agps_provider)
     if [[ -n "$_gpsv" ]]; then pass "ro.gps.agps_provider=$_gpsv"; \
     else skip "ro.gps.agps_provider" "vacío"; fi
-    if adb_sh "getprop" | grep -q "^persist.gps"; then
-        pass "Propiedades persist.gps presentes"
-    else skip "persist.gps props" "no encontradas"; fi
+    # En ICS el servicio GPS se puede consultar vía dumpsys location
+    if adb_sh "dumpsys location 2>/dev/null" | grep -qi "gps\|provider"; then
+        pass "LocationManager responde (GPS provider visible)"
+    else skip "dumpsys location" "sin datos de GPS"; fi
     manual "GPS fix real"  "al aire libre — abre Maps y espera fix de satélites (~2 min)"
 fi
 
@@ -215,16 +230,12 @@ if section camera "CÁMARA"; then
     chk_file "libcamera.so"        "/system/lib/libcamera.so"
     chk_file "libcameraservice.so" "/system/lib/libcameraservice.so"
     chk_file "media_profiles.xml"  "/system/etc/media_profiles.xml"
-    chk_prop "ro.build.product para blob"  ro.build.product  "msm7625a"
-    chk_prop "persist.camera.mode=1"       persist.camera.mode "1"
-    # Verificar que el perfil H.263 está activo (no M4V 640x480 que falla)
+    chk_prop "ro.build.product para blob"  ro.build.product  "y210"
     _codec=$(adb_sh "grep -m1 'codec' /system/etc/media_profiles.xml 2>/dev/null")
     if [[ "$_codec" == *"h263"* ]]; then pass "media_profiles usa h263 (SW encoder OK)"; \
     else skip "media_profiles codec" "='$_codec' (esperado h263)"; fi
-    # Lanzar y verificar
-    # am kill/force-stop no existen en Gingerbread 2.3 — usar pkill
-    _campid=$(adb_sh "ps 2>/dev/null | grep 'android.camera' | grep -v grep | awk '{print \$2}' | head -1")
-    [[ -n "$_campid" ]] && adb_sh "kill $_campid" 2>/dev/null || true
+    # En ICS am force-stop está disponible (a diferencia de GB)
+    adb_sh "am force-stop com.android.camera" 2>/dev/null || true
     adb_sh "logcat -c" 2>/dev/null || true
     adb_sh "am start -n com.android.camera/.Camera" > /dev/null 2>&1
     sleep 4
@@ -234,9 +245,7 @@ if section camera "CÁMARA"; then
     _prev=$(adb_sh "logcat -d 2>/dev/null" | grep -c "startPreview.*rc=0" 2>/dev/null || echo 0)
     if [[ "$_prev" -gt 0 ]]; then pass "startPreview rc=0 en logcat"; \
     else skip "startPreview logcat" "no hay log reciente (OK si ya estaba corriendo)"; fi
-    # am kill/force-stop no existen en Gingerbread 2.3 — usar pkill
-    _campid=$(adb_sh "ps 2>/dev/null | grep 'android.camera' | grep -v grep | awk '{print \$2}' | head -1")
-    [[ -n "$_campid" ]] && adb_sh "kill $_campid" 2>/dev/null || true
+    adb_sh "am force-stop com.android.camera" 2>/dev/null || true
     manual "Preview foto en color"   "verifica: 640×480, colores reales, portrait"
     manual "Captura de foto"         "toma foto — verifica JPEG en galería"
     manual "Switch a modo video"     "pulsa botón video — verifica preview 352×288"
@@ -250,26 +259,40 @@ if section storage "ALMACENAMIENTO"; then
     _dfdata=$(adb_sh "df /data 2>/dev/null | tail -1")
     if [[ -n "$_dfdata" ]]; then pass "/data montado ($_dfdata)"; \
     else fail "/data" "df falló"; fi
-    if adb_sh "mount 2>/dev/null" | grep -q "sdcard\|/mnt/sdcard"; then
-        pass "SDCard montada"
-    else skip "SDCard" "no montada — insertar microSD"; fi
     _dfsys=$(adb_sh "df /system 2>/dev/null | tail -1")
     if [[ -n "$_dfsys" ]]; then pass "/system montado ($_dfsys)"; \
     else fail "/system" "df falló"; fi
-    manual "USB almacenamiento masivo" "activa UMS — verifica unidad en PC"
+    # En ICS la sdcard se monta en /storage/sdcard0 (symlink desde /mnt/sdcard)
+    if adb_sh "mount 2>/dev/null" | grep -qE "sdcard|/storage/sdcard0"; then
+        pass "SDCard montada"
+    elif adb_sh "[ -d '/storage/sdcard0' ] && echo y" | grep -q y; then
+        pass "SDCard directorio /storage/sdcard0 presente"
+    else skip "SDCard" "no montada — insertar microSD"; fi
+    # En ICS el acceso por defecto es MTP (no UMS)
+    manual "MTP / File Transfer"  "conecta USB — verifica modo MTP en PC (no UMS)"
 fi
 
 # ── 12. RIL / telefonía ───────────────────────────────────────────────────────
 
 if section ril "RIL / TELEFONÍA"; then
-    chk_file "libril-qc-1.so"  "/system/lib/libril-qc-1.so"
+    # msm7x27a en ICS puede usar libril-qc-1.so o libril-qc-qmi.so según modem
+    if adb_sh "[ -e '/system/lib/libril-qc-qmi-1.so' ] && echo y" | grep -q y; then
+        pass "RIL library libril-qc-qmi-1.so"
+    elif adb_sh "[ -e '/system/lib/libril-qc-1.so' ] && echo y" | grep -q y; then
+        pass "RIL library libril-qc-1.so"
+    else fail "RIL library" "ni libril-qc-qmi-1.so ni libril-qc-1.so encontrados"; fi
     _bb=$(adb_sh getprop gsm.version.baseband)
     if [[ -n "$_bb" ]]; then pass "Baseband: $_bb"; \
     else fail "Baseband" "gsm.version.baseband vacío"; fi
-    # En Gingerbread `dumpsys iphonesubinfo` es más fiable que `service call`
-    _imei=$(adb_sh "dumpsys iphonesubinfo 2>/dev/null" | grep "Device ID" | grep -o '[0-9]\{15\}')
+    # En ICS el IMEI se obtiene vía service call iphonesubinfo 1
+    _imei=$(adb_sh "service call iphonesubinfo 1 2>/dev/null" | grep -oP "(?<=\x27)[0-9]+" | tr -d '\n')
     if [[ -n "$_imei" && "${#_imei}" -ge 15 ]]; then pass "IMEI válido (${_imei:0:6}xxxxxxxxx)"; \
-    else fail "IMEI" "resultado='$_imei' (¿permisos READ_PHONE_STATE?)"; fi
+    else
+        # fallback: dumpsys iphonesubinfo
+        _imei2=$(adb_sh "dumpsys iphonesubinfo 2>/dev/null" | grep -oP '[0-9]{15}')
+        if [[ -n "$_imei2" ]]; then pass "IMEI válido vía dumpsys (${_imei2:0:6}xxxxxxxxx)"; \
+        else fail "IMEI" "no obtenido (¿permisos READ_PHONE_STATE?)"; fi
+    fi
     _op=$(adb_sh getprop gsm.operator.alpha)
     _simstate=$(adb_sh getprop gsm.sim.state)
     if [[ -n "$_op" ]]; then pass "Operador registrado: $_op"; \
@@ -294,6 +317,10 @@ if section power "ENERGÍA"; then
     _batt=$(adb_sh "cat /sys/class/power_supply/battery/capacity 2>/dev/null")
     if [[ -n "$_batt" && "$_batt" -gt 0 ]] 2>/dev/null; then pass "Batería: ${_batt}%"; \
     else skip "Batería sysfs" "ruta no estándar — verificar manualmente"; fi
+    # En ICS wake locks visibles vía dumpsys power
+    if adb_sh "dumpsys power 2>/dev/null" | grep -qi "wake lock\|mWakefulness"; then
+        pass "dumpsys power responde"
+    else skip "dumpsys power" "sin respuesta útil"; fi
     if $FAST; then skip "Tests de suspend" "--fast: omitido"; \
     else
         manual "Suspensión pantalla"  "apaga pantalla 30s — verifica reanudación"

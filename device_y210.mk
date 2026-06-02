@@ -4,9 +4,8 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/languages_full.mk)
 $(call inherit-product, device/common/gps/gps_us_supl.mk)
 
 # RIL disabled for now
-FRAMEWORKS_BASE_SUBDIRS += ../../$(LOCAL_PATH)/ril/
+# FRAMEWORKS_BASE_SUBDIRS += ../../$(LOCAL_PATH)/ril/
 
-USE_STOCK_COPYBIT_GRALLOC ?= false
 $(call inherit-product-if-exists, vendor/huawei/y210/y210-vendor.mk)
 
 DEVICE_PACKAGE_OVERLAYS += device/huawei/y210/overlay
@@ -19,30 +18,24 @@ PRODUCT_PACKAGES += \
 
 # Graphics
 PRODUCT_PACKAGES += \
-    gralloc.msm7k \
-    copybit.msm7k
+    gralloc.msm7x27a \
+    copybit.msm7x27a
+# hwcomposer.msm7x27a disabled: on Y210 the HWC applies a display transform
+# that misaligns touch coordinates in ICS. Re-enable once verified.
 
 # Audio
 PRODUCT_PACKAGES += \
     libaudio \
     libaudiopolicy \
     audio.a2dp.default \
-    libaudioutils
+    audio.primary.msm7x27a \
+    audio_policy.msm7x27a
 
 # Other
 PRODUCT_PACKAGES += \
-    lights.y210 \
+    lights.msm7x27a \
     gps.y210 \
-    fminit
-
-ifeq ($(TARGET_PREBUILT_KERNEL),)
-	LOCAL_KERNEL := device/huawei/y210/kernel
-else
-	LOCAL_KERNEL := $(TARGET_PREBUILT_KERNEL)
-endif
-
-PRODUCT_COPY_FILES += \
-    $(LOCAL_KERNEL):kernel
+    FileManager
 
 # Install the features available on this device.
 PRODUCT_COPY_FILES += \
@@ -81,6 +74,22 @@ PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/system/app/ProjectMenuAct.odex:system/app/ProjectMenuAct.odex \
     device/huawei/y210/prebuilt/system/lib/libprojectmenu.so:system/lib/libprojectmenu.so
 
+# File manager prebuilt — copy FileManager.apk to prebuilt/system/app/ to include in ROM
+# Example: cp ~/EsFileExplorer.apk device/huawei/y210/prebuilt/system/app/FileManager.apk
+ifneq ($(wildcard device/huawei/y210/prebuilt/system/app/FileManager.apk),)
+PRODUCT_COPY_FILES += \
+    device/huawei/y210/prebuilt/system/app/FileManager.apk:system/app/FileManager.apk
+endif
+
+# Input device configuration (IDC) — required for touchscreen classification in ICS
+PRODUCT_COPY_FILES += \
+    device/huawei/y210/prebuilt/system/usr/idc/melfas-touchscreen.idc:system/usr/idc/melfas-touchscreen.idc \
+    device/huawei/y210/prebuilt/system/usr/idc/synaptics.idc:system/usr/idc/synaptics.idc \
+    device/huawei/y210/prebuilt/system/usr/keylayout/surf_keypad.kl:system/usr/keylayout/surf_keypad.kl \
+    device/huawei/y210/prebuilt/system/usr/keylayout/7x27a_kp.kl:system/usr/keylayout/7x27a_kp.kl \
+    device/huawei/y210/prebuilt/system/usr/keylayout/7k_handset.kl:system/usr/keylayout/7k_handset.kl \
+    device/huawei/y210/prebuilt/system/usr/keychars/7x27a_kp.kcm:system/usr/keychars/7x27a_kp.kcm
+
 # Wi-Fi firmware and module (Qualcomm/Atheros)
 PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/system/wifi/ar6000.ko:system/wifi/ar6000.ko \
@@ -97,7 +106,8 @@ $(call inherit-product, build/target/product/full_base.mk)
 
 PRODUCT_LOCALES += hdpi
 
-PRODUCT_NAME := Y210
+PRODUCT_BUILD_PROP_OVERRIDES += BUILD_UTC_DATE=0
+PRODUCT_NAME := full_y210
 PRODUCT_DEVICE := y210
 PRODUCT_BRAND := Huawei
 PRODUCT_MANUFACTURER := HUAWEI

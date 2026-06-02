@@ -1,7 +1,7 @@
 /* include/linux/msm_audio.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -83,6 +83,14 @@
 #define AUDIO_SET_AGC        _IOW(AUDIO_IOCTL_MAGIC, 90, unsigned)
 #define AUDIO_SET_NS         _IOW(AUDIO_IOCTL_MAGIC, 91, unsigned)
 #define AUDIO_SET_TX_IIR     _IOW(AUDIO_IOCTL_MAGIC, 92, unsigned)
+#define AUDIO_GET_BUF_CFG    _IOW(AUDIO_IOCTL_MAGIC, 93, \
+					struct msm_audio_buf_cfg)
+#define AUDIO_SET_BUF_CFG    _IOW(AUDIO_IOCTL_MAGIC, 94, \
+					struct msm_audio_buf_cfg)
+#define AUDIO_SET_ACDB_BLK _IOW(AUDIO_IOCTL_MAGIC, 95,  \
+					struct msm_acdb_cmd_device)
+#define AUDIO_GET_ACDB_BLK _IOW(AUDIO_IOCTL_MAGIC, 96,  \
+					struct msm_acdb_cmd_device)
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	100
 
@@ -127,6 +135,7 @@
 #define AGC_ENABLE		0x0001
 #define NS_ENABLE		0x0002
 #define TX_IIR_ENABLE		0x0004
+#define FLUENCE_ENABLE		0x0008
 
 #define VOC_REC_UPLINK		0x00
 #define VOC_REC_DOWNLINK	0x01
@@ -146,6 +155,11 @@ struct msm_audio_config {
 struct msm_audio_stream_config {
 	uint32_t buffer_size;
 	uint32_t buffer_count;
+};
+
+struct msm_audio_buf_cfg{
+	uint32_t meta_info_enable;
+	uint32_t frames_per_buf;
 };
 
 struct msm_audio_stats {
@@ -238,5 +252,105 @@ struct msm_audio_pcm_config {
 
 #define AUDIO_EVENT_SUSPEND 0
 #define AUDIO_EVENT_RESUME 1
+#define AUDIO_EVENT_WRITE_DONE 2
+#define AUDIO_EVENT_READ_DONE   3
+#define AUDIO_EVENT_STREAM_INFO 4
+#define AUDIO_EVENT_BITSTREAM_ERROR_INFO 5
 
-#endif /* __LINUX_MSM_AUDIO_H */
+#define AUDIO_CODEC_TYPE_MP3 0
+#define AUDIO_CODEC_TYPE_AAC 1
+
+struct msm_audio_bitstream_info {
+	uint32_t codec_type;
+	uint32_t chan_info;
+	uint32_t sample_rate;
+	uint32_t bit_stream_info;
+	uint32_t bit_rate;
+	uint32_t unused[3];
+};
+
+struct msm_audio_bitstream_error_info {
+	uint32_t dec_id;
+	uint32_t err_msg_indicator;
+	uint32_t err_type;
+};
+
+union msm_audio_event_payload {
+	struct msm_audio_aio_buf aio_buf;
+	struct msm_audio_bitstream_info stream_info;
+	struct msm_audio_bitstream_error_info error_info;
+	int reserved;
+};
+
+struct msm_audio_event {
+	int event_type;
+	int timeout_ms;
+	union msm_audio_event_payload event_payload;
+};
+
+#define MSM_SNDDEV_CAP_RX 0x1
+#define MSM_SNDDEV_CAP_TX 0x2
+#define MSM_SNDDEV_CAP_VOICE 0x4
+
+struct msm_snd_device_info {
+	uint32_t dev_id;
+	uint32_t dev_cap; /* bitmask describe capability of device */
+	char dev_name[64];
+};
+
+struct msm_snd_device_list {
+	uint32_t  num_dev; /* Indicate number of device info to be retrieved */
+	struct msm_snd_device_info *list;
+};
+
+struct msm_dtmf_config {
+	uint16_t path;
+	uint16_t dtmf_hi;
+	uint16_t dtmf_low;
+	uint16_t duration;
+	uint16_t tx_gain;
+	uint16_t rx_gain;
+	uint16_t mixing;
+};
+
+#define AUDIO_ROUTE_STREAM_VOICE_RX 0
+#define AUDIO_ROUTE_STREAM_VOICE_TX 1
+#define AUDIO_ROUTE_STREAM_PLAYBACK 2
+#define AUDIO_ROUTE_STREAM_REC      3
+
+struct msm_audio_route_config {
+	uint32_t stream_type;
+	uint32_t stream_id;
+	uint32_t dev_id;
+};
+
+#define AUDIO_MAX_EQ_BANDS 12
+
+struct msm_audio_eq_band {
+	uint16_t     band_idx; /* The band index, 0 .. 11 */
+	uint32_t     filter_type; /* Filter band type */
+	uint32_t     center_freq_hz; /* Filter band center frequency */
+	uint32_t     filter_gain; /* Filter band initial gain (dB) */
+			/* Range is +12 dB to -12 dB with 1dB increments. */
+	uint32_t     q_factor;
+} __attribute__ ((packed));
+
+struct msm_audio_eq_stream_config {
+	uint32_t	enable; /* Number of consequtive bands specified */
+	uint32_t	num_bands;
+	struct msm_audio_eq_band	eq_bands[AUDIO_MAX_EQ_BANDS];
+} __attribute__ ((packed));
+
+struct msm_acdb_cmd_device {
+	uint32_t     command_id;
+	uint32_t     device_id;
+	uint32_t     network_id;
+	uint32_t     sample_rate_id;      /* Actual sample rate value */
+	uint32_t     interface_id;        /* See interface id's above */
+	uint32_t     algorithm_block_id;  /* See enumerations above */
+	uint32_t     total_bytes;         /* Length in bytes used by buffer */
+	uint32_t     *phys_buf;           /* Physical Address of data */
+};
+
+
+#endif

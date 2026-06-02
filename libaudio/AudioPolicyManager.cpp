@@ -24,7 +24,7 @@
 #include <math.h>
 
 
-namespace android {
+namespace android_audio_legacy {
 
 // ----------------------------------------------------------------------------
 // AudioPolicyManager for msm7k platform
@@ -131,7 +131,6 @@ uint32_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strategy, boo
             }
             // FALL THROUGH
 
-        case STRATEGY_MEDIA_SONIFICATION:
             // If incall, just select the STRATEGY_PHONE device: The rest of the behavior is handled by
             // handleIncallSonification().
             if (mPhoneState == AudioSystem::MODE_IN_CALL) {
@@ -313,4 +312,4 @@ status_t AudioPolicyManager::checkAndSetVolume(int stream, int index, audio_io_h
 
     return NO_ERROR;
 }
-}; // namespace android
+}; // namespace android_audio_legacy

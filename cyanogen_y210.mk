@@ -4,8 +4,11 @@ $(call inherit-product, device/huawei/y210/device_y210.mk)
 # Inherit some common cyanogenmod stuff.
 $(call inherit-product, vendor/cyanogen/products/common_full.mk)
 
-# Include GSM stuff
-$(call inherit-product, vendor/cyanogen/products/gsm.mk)
+# Trim optional CM apps to keep system.img within the Y210 partition budget.
+PRODUCT_PACKAGES := $(filter-out CMWallpapers VideoEditor,$(PRODUCT_PACKAGES))
+
+# Include GSM stuff (disabled for now, no RIL)
+# $(call inherit-product, vendor/cyanogen/products/gsm.mk)
 
 # Broadcom FM radio
 $(call inherit-product, vendor/cyanogen/products/bcm_fm_radio.mk)
