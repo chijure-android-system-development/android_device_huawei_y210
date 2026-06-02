@@ -35,7 +35,8 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     lights.msm7x27a \
     gps.y210 \
-    FileManager
+    FileManager \
+    libos_compat
 
 # Install the features available on this device.
 PRODUCT_COPY_FILES += \
