@@ -26,9 +26,12 @@ net.ntp.timereference=0
 # persist.rild.nitz_short_ons_3=
 DEVICE_PROVISIONED=1
 debug.sf.hw=1
+# From Dazzozo G300 CM9 (same MSM7x27A)
+debug.composition.type=mdp
 debug.composition.7x27A.type=mdp
 debug.composition.7x25A.type=mdp
 debug.fb.partial_updates=1
+hwui.render_dirty_regions=true
 # Performance
 windowsmgr.max_events_per_sec=60
 persist.sys.use_dithering=0
@@ -65,9 +68,10 @@ media.stagefright.enable-aac=true
 media.stagefright.enable-qcp=true
 
 #
-# system prop for opengles version
+# system prop for opengles version (Adreno 200 = OpenGL ES 2.0)
 #
 ro.opengles.version=131072
+ro.vendor.extension_library=
 
 #
 # system props for the data modules
@@ -243,9 +247,7 @@ ro.config.AM_PM_STYLE=1
 ro.config.move_up_display=true
 # DTS2011051100003 r00182811 20110517 For safemode END
 
-#/*<DTS2010091000150 yangzijin 20100921 begin
-ro.opengles.version=131072
-#DTS2010091000150 yangzijin 20100921 end>*/
+#/*<DTS2010091000150 yangzijin 20100921 begin — duplicate removed, see above
 # DTS2011060304448 guoxiong 2011-01-30 begin
 ro.config.hw_eapsim=true
 # DTS2011060304448 guoxiong 2011-01-30 end
