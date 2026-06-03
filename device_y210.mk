@@ -28,7 +28,7 @@ PRODUCT_PACKAGES += \
     libaudio \
     libaudiopolicy \
     audio.a2dp.default \
-    audio.primary.msm7x27a \
+    audio.primary.y210 \
     audio_policy.msm7x27a
 
 # Other
