@@ -107,6 +107,10 @@ PRODUCT_COPY_FILES += \
 # full_base.mk adds VideoEditor, wallpapers etc (~20 MB) that won't fit.
 $(call inherit-product, build/target/product/core.mk)
 
+# Fonts — required by Zygote/libskia at preload. core.mk does not include them.
+$(call inherit-product-if-exists, frameworks/base/data/fonts/fonts.mk)
+$(call inherit-product-if-exists, external/lohit-fonts/fonts.mk)
+
 # Add back apps needed for a functional phone that core.mk omits
 PRODUCT_PACKAGES += \
     Mms \
