@@ -103,13 +103,10 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(call find-copy-subdir-files,*,device/huawei/y210/prebuilt/system/etc/bluetooth,system/etc/bluetooth)
 
-# Use core base instead of full_base to control partition size.
-# full_base.mk adds VideoEditor, wallpapers etc (~20 MB) that won't fit.
-$(call inherit-product, build/target/product/core.mk)
-
-# Fonts — required by Zygote/libskia at preload. core.mk does not include them.
-$(call inherit-product-if-exists, frameworks/base/data/fonts/fonts.mk)
-$(call inherit-product-if-exists, external/lohit-fonts/fonts.mk)
+# Use generic_no_telephony as base: includes fonts, keyboards, librs_jni,
+# RenderScript and other runtime essentials that core.mk omits.
+# Avoids the ~20 MB of wallpapers/VideoEditor in full_base.mk.
+$(call inherit-product, build/target/product/generic_no_telephony.mk)
 
 # Add back apps needed for a functional phone that core.mk omits
 PRODUCT_PACKAGES += \
