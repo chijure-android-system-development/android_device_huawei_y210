@@ -132,6 +132,18 @@ void *os_lib_map(const char *p)            { (void)p; return (void*)1; /* non-NU
 void *os_lib_getaddr(void *h, const char *s){ (void)h; (void)s; return NULL; }
 void  os_lib_unmap(void *h)                { (void)h; }
 
-/* ── gsl_cffdump stubs (debug crash-dump, never called in normal operation) ── */
+/* ── gsl_cffdump stubs (debug crash-dump) ─────────────────────────────────── */
 void gsl_cffdump_surface_params_write(void *a, void *b, void *c){ (void)a;(void)b;(void)c; }
 void gsl_cffdump_writeverifyfile(void *a, void *b)              { (void)a;(void)b; }
+
+/* ── gsl_perfcounter stubs (not available on MSM7x27A) ──────────────────── */
+int  gsl_perfcounter_trylock(void *a, void *b) { (void)a;(void)b; return 0; }
+void gsl_perfcounter_unlock(void *a)           { (void)a; }
+
+/* ── gsl_memory_* stubs (functions missing from the vendor libgsl.so) ────── */
+int gsl_memory_copy(void *dst, void *src, unsigned int nbytes)
+    { (void)dst;(void)src;(void)nbytes; return 0; }
+int gsl_memory_copy_multiple(void *ops, unsigned int count)
+    { (void)ops;(void)count; return 0; }
+int gsl_memory_read_multiple(void *ops, unsigned int count)
+    { (void)ops;(void)count; return 0; }
