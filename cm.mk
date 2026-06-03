@@ -12,8 +12,6 @@ $(call inherit-product, device/huawei/y210/device_y210.mk)
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += persist.service.adb.enable=1
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += persist.sys.root_access=3
 
-# Trim optional CM apps to keep system.img within the Y210 partition budget.
-PRODUCT_PACKAGES := $(filter-out CMWallpapers VideoEditor,$(PRODUCT_PACKAGES))
 
 PRODUCT_RELEASE_NAME := Y210
 PRODUCT_DEVICE := y210

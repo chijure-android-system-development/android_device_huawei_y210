@@ -38,3 +38,6 @@ PRODUCT_VERSION_DEVICE_SPECIFIC :=
 
 PRODUCT_COPY_FILES +=  \
      vendor/cyanogen/prebuilt/mdpi/media/bootanimation.zip:system/media/bootanimation.zip
+# Y210 system partition (186MB) is too small for all CM default apps.
+# Remove heavy optional packages last so all inherit-product calls are done.
+PRODUCT_PACKAGES := $(filter-out CMWallpapers VideoEditor LiveWallpapers     LiveWallpapersPicker MagicSmokeWallpapers Galaxy4 HoloSpiralWallpaper     NoiseField PhaseBeam VisualizationWallpapers,$(PRODUCT_PACKAGES))

@@ -1,4 +1,6 @@
-USE_CAMERA_STUB := false
+# Use stub — the real camera HAL comes from vendor blob (libcamera.y210.so)
+# The source wrapper (libcamera/) needs ICS porting, disabled for now.
+USE_CAMERA_STUB := true
 
 # inherit from the proprietary version
 -include vendor/huawei/y210/BoardConfigVendor.mk

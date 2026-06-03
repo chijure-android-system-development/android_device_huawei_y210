@@ -103,7 +103,29 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(call find-copy-subdir-files,*,device/huawei/y210/prebuilt/system/etc/bluetooth,system/etc/bluetooth)
 
-$(call inherit-product, build/target/product/full_base.mk)
+# Use core base instead of full_base to control partition size.
+# full_base.mk adds VideoEditor, wallpapers etc (~20 MB) that won't fit.
+$(call inherit-product, build/target/product/core.mk)
+
+# Add back apps needed for a functional phone that core.mk omits
+PRODUCT_PACKAGES += \
+    Mms \
+    Phone \
+    Settings \
+    LatinIME \
+    Calendar \
+    DeskClock \
+    Email \
+    Exchange \
+    Gallery2 \
+    Music \
+    Camera \
+    Bluetooth \
+    VoiceDialer \
+    SoundRecorder \
+    SystemUI \
+    Trebuchet \
+    Apollo
 
 PRODUCT_LOCALES += hdpi
 
