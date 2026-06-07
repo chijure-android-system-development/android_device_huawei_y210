@@ -167,7 +167,7 @@ Ver `RIL_NOTES.md` para arquitectura QCRIL y fixes de datos.
 |---|---|---|
 | BatteryStats | **OK** | `xt_qtaguid` portado al kernel desde e400. `/proc/net/xt_qtaguid/stats` disponible con datos reales. |
 | `installd` | **OK** | `class main` en `init.y210.rc` |
-| Screenshot (power menu) | **No** | Ver `SCREENSHOT_NOTES.md` — FBO no disponible en PixelFlinger |
+| Screenshot (power menu) | **OK** | Funciona con ruta HW EGL/Adreno; el fallo era de la ruta PixelFlinger/software |
 | Teclado LatinIME | **OK** | Fix overlay: `keyboardHeight` 1.285in→1.1in, `keyboard_bottom_padding` 4.669%→1% |
 
 ---
@@ -191,7 +191,7 @@ Estas apps suman ~100 MB de RAM comprometida sin ofrecer valor en este dispositi
 ## Bugs pendientes (por prioridad)
 
 1. **Camera HAL** — port del wrapper a ICS CameraHardwareInterface. Bloqueante para cámara.
-2. **Screenshot (power menu)** — SurfaceFlinger requiere FBO que PixelFlinger no tiene. Ver `SCREENSHOT_NOTES.md`.
+2. ~~**Screenshot (power menu)**~~ — resuelto con ruta HW EGL/Adreno; PixelFlinger/software sigue sin FBO.
 3. **GPU HW GL / Adreno EGL** — boot HW validado; falta prueba amplia de apps 3D y estabilidad prolongada.
 4. **hwcomposer** — desactivado por alineación de touch; investigar causa raíz.
 5. ~~**BatteryStats**~~ — resuelto: `xt_qtaguid` portado al kernel.

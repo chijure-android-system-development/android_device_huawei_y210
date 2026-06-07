@@ -1,6 +1,20 @@
 # Screenshot — Huawei Y210 CM9 (ICS)
 
-## Estado: No funciona (2026-06-03)
+## Estado CM9 (2026-06-06): OK con ruta HW EGL/Adreno
+
+El screenshot desde el power menu ya funciona en la configuración actual con
+`debug.sf.hw=1` y SurfaceFlinger usando Adreno 200.
+
+Conclusión actual: el fallo documentado abajo correspondía a la ruta software
+PixelFlinger, donde no había `GL_OES_framebuffer_object` (FBO). Al pasar el
+compositor a la ruta HW EGL/Adreno, SurfaceFlinger sí puede capturar pantalla.
+
+Mantener `debug.sf.hw=1` como ruta normal. Si se vuelve a `debug.sf.hw=0`, el
+fallo de screenshot puede reaparecer.
+
+---
+
+## Historial: fallo en ruta software (2026-06-03)
 
 El screenshot desde el power menu y los thumbnails de Recent Apps muestran
 "Couldn't save screenshot, Storage may be full" aunque haya espacio disponible.

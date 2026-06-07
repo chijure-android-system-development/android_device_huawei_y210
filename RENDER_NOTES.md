@@ -10,6 +10,7 @@
 | Hardware GL en apps | **Parcial** | EGL Adreno inicializa; Gallery creó contexto EGL HW. Falta prueba amplia de apps 3D |
 | hwcomposer | **No** | Desactivado: desalinea touch. Bug pendiente de investigar. |
 | Ghosting / SWAP_RECTANGLE | **OK** | Fix `fb_setUpdateRect_noop` aplicado (ver sección CM7 abajo) |
+| Screenshot power menu | **OK** | Funciona en ruta HW EGL/Adreno; en PixelFlinger/software fallaba por falta de FBO |
 
 ### Fixes aplicados para GPU en ICS
 - `libgsl.so` reemplazado por el del LG e400 CM9 (mismo Adreno200, compatible)
