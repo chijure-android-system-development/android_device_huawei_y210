@@ -205,6 +205,7 @@ on cust
     chown smartcard smartcard /dev/assd
 
 on boot
+    export LD_PRELOAD /system/lib/libcamera_compat.so
 # /*< DTS2011111900490 zhangyancun 201119 begin */
 # /* modify the open file maximum to 2048 */
     setrlimit 7 2048 2048

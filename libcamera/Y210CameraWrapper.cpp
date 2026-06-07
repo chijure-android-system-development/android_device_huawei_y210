@@ -161,6 +161,11 @@ static CameraParameters seedParameters()
     p.set("video-hfr-values", "off");
     p.set("supported-video-sizes", "352x288,320x240,176x144");
     p.set("preferred-preview-size-for-video", "352x288");
+    /* Disable sharpness/ASF filter to avoid vfe_util_update_asf_5x5 crash
+     * when the VFE coefficient table isn't initialized for this sensor. */
+    p.set("sharpness", "0");
+    p.set("sharpness-min", "0");
+    p.set("sharpness-max", "0");
     return p;
 }
 
@@ -436,6 +441,14 @@ static int y210_start_preview(camera_device_t* /*dev*/)
             LOGE("Y210: MemoryHeapPmemD1 not found: %s", dlerror());
         }
     }
+
+    /* Call setOverlay(NULL) so the blob initializes its VFE pipeline (ASF tables,
+     * sharpness, etc.).  In ICS there is no Overlay API but the GB blob runs
+     * its VFE init code inside setOverlay even with a null sp<>.  Without this
+     * the blob leaves the ASF coefficient pointer uninitialized → SIGSEGV in
+     * vfe_util_update_asf_5x5 on the first VFE output frame. */
+    gCamera->setOverlay(sp<Overlay>());
+    LOGI("Y210: setOverlay(null) called to prime VFE init");
 
     gCamera->enableMsgType(CAMERA_MSG_PREVIEW_FRAME);
 

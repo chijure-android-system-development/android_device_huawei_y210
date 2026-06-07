@@ -34,6 +34,11 @@ PRODUCT_PACKAGES += \
     audio.primary.y210 \
     audio_policy.msm7x27a
 
+# Camera
+PRODUCT_PACKAGES += \
+    camera.y210 \
+    libcamera_compat
+
 # Other
 PRODUCT_PACKAGES += \
     lights.y210 \
