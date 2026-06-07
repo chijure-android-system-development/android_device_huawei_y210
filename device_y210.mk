@@ -22,9 +22,8 @@ PRODUCT_PACKAGES += \
 # Graphics
 PRODUCT_PACKAGES += \
     gralloc.msm7x27a \
-    copybit.msm7x27a
-# hwcomposer.msm7x27a disabled: on Y210 the HWC applies a display transform
-# that misaligns touch coordinates in ICS. Re-enable once verified.
+    copybit.msm7x27a \
+    hwcomposer.msm7x27a
 
 # Audio
 PRODUCT_PACKAGES += \
@@ -80,6 +79,7 @@ PRODUCT_COPY_FILES += \
 	    device/huawei/y210/prebuilt/system/bin/sleeplogcat:system/bin/sleeplogcat \
 	    device/huawei/y210/prebuilt/system/bin/kmsgcat:system/bin/kmsgcat \
 	    device/huawei/y210/prebuilt/system/bin/diag_mdlog:system/bin/diag_mdlog \
+	    device/huawei/y210/prebuilt/system/app/FM.apk:system/app/FM.apk \
 	    device/huawei/y210/prebuilt/system/app/ProjectMenuAct.apk:system/app/ProjectMenuAct.apk \
     device/huawei/y210/prebuilt/system/app/ProjectMenuAct.odex:system/app/ProjectMenuAct.odex \
     device/huawei/y210/prebuilt/system/lib/libprojectmenu.so:system/lib/libprojectmenu.so

@@ -27,10 +27,11 @@ net.ntp.timereference=0
 DEVICE_PROVISIONED=1
 debug.sf.hw=1
 persist.sys.nobootanimation=0
-# From Dazzozo G300 CM9 (same MSM7x27A)
-debug.composition.type=mdp
-debug.composition.7x27A.type=mdp
-debug.composition.7x25A.type=mdp
+# GPU composition: MDP copybit fails on Y210 (format mismatch); HWC still
+# handles YUV overlay. Video overlay path is independent of compositionType.
+debug.composition.type=gpu
+debug.composition.7x27A.type=gpu
+debug.composition.7x25A.type=gpu
 debug.fb.partial_updates=1
 hwui.render_dirty_regions=true
 # Performance
