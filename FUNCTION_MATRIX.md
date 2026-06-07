@@ -63,7 +63,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 | Touchscreen | **OK** | melfas-touchscreen.idc instalado |
 | Multitouch (MT tipo A) | **OK** | |
 | Botones físicos (power/vol) | **OK** | |
-| Botones capacitivos (home/back/menú) | **OK** | |
+| Botones capacitivos (home/back/menú) | **OK** | Virtual keys del touchscreen; `melfas-touchscreen.kl` evita fallback a `Generic.kl` (`key 102 MOVE_HOME`) |
 
 ### Luces / vibración
 

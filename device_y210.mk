@@ -90,6 +90,8 @@ endif
 PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/system/usr/idc/melfas-touchscreen.idc:system/usr/idc/melfas-touchscreen.idc \
     device/huawei/y210/prebuilt/system/usr/idc/synaptics.idc:system/usr/idc/synaptics.idc \
+    device/huawei/y210/prebuilt/system/usr/keylayout/melfas-touchscreen.kl:system/usr/keylayout/melfas-touchscreen.kl \
+    device/huawei/y210/prebuilt/system/usr/keylayout/synaptics.kl:system/usr/keylayout/synaptics.kl \
     device/huawei/y210/prebuilt/system/usr/keylayout/surf_keypad.kl:system/usr/keylayout/surf_keypad.kl \
     device/huawei/y210/prebuilt/system/usr/keylayout/7x27a_kp.kl:system/usr/keylayout/7x27a_kp.kl \
     device/huawei/y210/prebuilt/system/usr/keylayout/7k_handset.kl:system/usr/keylayout/7k_handset.kl \
