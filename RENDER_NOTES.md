@@ -26,7 +26,7 @@ La ruta correcta para aceleración por hardware en este árbol es:
 
 ```properties
 debug.sf.hw=1
-persist.sys.nobootanimation=1
+persist.sys.nobootanimation=0
 ```
 
 Requisitos de esa ruta:

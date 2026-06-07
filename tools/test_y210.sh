@@ -268,8 +268,7 @@ if section storage "ALMACENAMIENTO"; then
     elif adb_sh "[ -d '/storage/sdcard0' ] && echo y" | grep -q y; then
         pass "SDCard directorio /storage/sdcard0 presente"
     else skip "SDCard" "no montada — insertar microSD"; fi
-    # En ICS el acceso por defecto es MTP (no UMS)
-    manual "MTP / File Transfer"  "conecta USB — verifica modo MTP en PC (no UMS)"
+    manual "USB mass storage" "conecta USB, activa almacenamiento USB y verifica que la microSD aparece como disco en PC"
 fi
 
 # ── 12. RIL / telefonía ───────────────────────────────────────────────────────

@@ -26,7 +26,7 @@ net.ntp.timereference=0
 # persist.rild.nitz_short_ons_3=
 DEVICE_PROVISIONED=1
 debug.sf.hw=1
-persist.sys.nobootanimation=1
+persist.sys.nobootanimation=0
 # From Dazzozo G300 CM9 (same MSM7x27A)
 debug.composition.type=mdp
 debug.composition.7x27A.type=mdp

@@ -138,7 +138,7 @@ Ver `CAMERA_NOTES.md` para el análisis del wrapper CM7 y la estrategia de port 
 |---|---|---|
 | `/data` / escritura | **OK** | |
 | SDCard (montaje) | **OK** | |
-| UMS (almacenamiento masivo USB) | **OK** | |
+| UMS (almacenamiento masivo USB) | **OK** | `sdcard2` comparte `/dev/block/vold/179:1` por `lun0`; Ajustes muestra la microSD como Tarjeta SD |
 
 ### Radio / Telefonía (RIL)
 
