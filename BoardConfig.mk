@@ -1,6 +1,5 @@
-# Use stub — the real camera HAL comes from vendor blob (libcamera.y210.so)
-# The source wrapper (libcamera/) needs ICS porting, disabled for now.
-USE_CAMERA_STUB := true
+# Camera HAL wrapper — ICS camera_device_t wrapping the GB Qualcomm blob
+USE_CAMERA_STUB := false
 
 # inherit from the proprietary version
 -include vendor/huawei/y210/BoardConfigVendor.mk
@@ -31,7 +30,9 @@ BUILD_SREC_GRAMMARS := false
 # building the generic msm7k audio HAL alongside the device-specific one.
 TARGET_PROVIDES_LIBAUDIO := true
 
-# TARGET_PROVIDES_LIBLIGHTS := true
+# hardware/msm7k/Android.mk keys off TARGET_PROVIDES_LIBLIGHTS to avoid
+# building the generic msm7k lights HAL alongside the device-specific one.
+TARGET_PROVIDES_LIBLIGHTS := true
 
 # GPS
 BOARD_USES_QCOM_GPS := true
@@ -97,7 +98,7 @@ WIFI_PRE_LOADER             := wlan_detect
 
 # Partition sizes from device /proc/mtd (bytes)
 BOARD_BOOTIMAGE_PARTITION_SIZE := 0x00500000
-BOARD_RECOVERYIMAGE_PARTITION_SIZE := 0x00500000
+BOARD_RECOVERYIMAGE_PARTITION_SIZE := 0x00600000
 BOARD_SYSTEMIMAGE_PARTITION_SIZE := 0x0BA00000
 BOARD_USERDATAIMAGE_PARTITION_SIZE := 0x0A000000
 BOARD_CACHEIMAGE_PARTITION_SIZE := 0x03A00000

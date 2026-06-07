@@ -245,7 +245,6 @@ chmod 0664 /dev/compass_dev
 chmod 0664 /dev/gyro
 #/* DTS2011082001050  liujinggang 20110822 end > */
 
-
 #/*<DTS2012053006935 Sync <DTS2011032602952  wanghoutian> 20120601 liaihua begin> */
 #add sprint recovery service
 # DTS2011040201434 jiating 20110413 begin
@@ -322,11 +321,6 @@ on property:service.health.manager=0
 service test_diag /system/bin/test_diag
     oneshot
 #/* DTS2011091901282 wangdong 20110919 end> */
-# /*< DTS2011092804184 xiewen 20110928 begin */
-# start huawei rpc server
-service oem_rpc_svc /system/bin/oem_rpc_svc
-    group qcom_oncrpc
-# /* DTS2011092804184 xiewen 20110928 end >*/
 #/* DTS2011120703789 weiheng 20111212 end> */
 
 service dumpstate /system/bin/dumpstate -s

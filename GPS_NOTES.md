@@ -1,3 +1,21 @@
+# Huawei Y210 — GPS Notes (CM9/ICS)
+
+## Estado CM9 (2026-06-03)
+
+| Función | Estado |
+|---|---|
+| Motor GPS (Loc API RPC) | **OK** |
+| XTRA | **OK** |
+| AGPS | **OK** |
+| Fix real (satélites) | **Pendiente** — requiere prueba al aire libre |
+
+El GPS corre en el ARM9 (modem AMSS) y se comunica con Android vía ONCRPC.
+Los fixes de GID 3006 y el HAL `gps.y210.so` aplicados en CM7 siguen vigentes.
+
+---
+
+## Historial CM7
+
 # Huawei Y210 (CM7) — GPS Notes
 
 ## Hardware

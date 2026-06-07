@@ -1,193 +1,250 @@
-# Huawei Y210 (CM7) — matriz de funciones y logging
+# Huawei Y210 — Matriz de funciones CM9 (Android 4.0.4 ICS)
 
-Este documento es una checklist única para:
+Última actualización: 2026-06-06
 
-- tener un inventario completo de funciones del Y210;
-- marcar el estado actual del port;
-- pedir logs de forma consistente (mismos comandos/archivos por bug).
-
-No reemplaza los notes existentes; los referencia cuando aplica:
-
-- `device/huawei/y210/WIFI_NOTES.md`
-- `device/huawei/y210/BLUETOOTH_NOTES.md`
-- `device/huawei/y210/AUDIO_NOTES.md`
-- `device/huawei/y210/CAMERA_NOTES.md`
-- `device/huawei/y210/GPS_NOTES.md`
-- `device/huawei/y210/RENDER_NOTES.md`
-- `device/huawei/y210/LOGGING_NOTES.md`
+Este documento es la fuente de verdad sobre el estado del port. Refleja CM9 (ICS).
+Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 
 ## Convención de estado
 
-- **OK**: validado en runtime (uso real).
-- **Parcial**: funciona con limitaciones o falta validar un caso clave.
-- **No**: falla o no implementado.
-- **N/A**: el hardware no existe en este modelo/variante (confirmar si hay duda).
-- **Pendiente**: no hay evidencia/logs recientes.
+- **OK** — validado en runtime (uso real).
+- **Parcial** — funciona con limitaciones o falta validar un caso clave.
+- **No** — falla o no implementado.
+- **N/A** — hardware no existe en este modelo.
+- **Pendiente** — sin evidencia/logs recientes.
 
-Cuando algo está en **Parcial/No/Pendiente**, adjuntar logs usando
-`collect_y210_debug.sh` y/o los comandos puntuales de la sección “Comandos”.
+## Hardware del dispositivo
 
-## Matriz (inventario + estado)
+| Elemento | Valor |
+|---|---|
+| SoC | Qualcomm MSM7225A (ARMv6, Cortex-A5 @ 600 MHz) |
+| Modem | ARM9 @ ~200 MHz, AMSS (reserva ~77 MB de los 256 MB físicos) |
+| RAM | 256 MB físicos / ~165 MB usables por Android |
+| GPU | Adreno 200 (Qualcomm) |
+| Pantalla | 320×480 HVGA, msmfb30 |
+| Touchscreen | Melfas MMS128 |
+| WiFi | AR6003 (ath6kl), interfaz `eth0` |
+| Bluetooth | Qualcomm Bahama, HCI-IBS UART `/dev/ttyHS0` |
+| Cámara | Sensor OV5640 (blob Qualcomm QualcommCameraHardware) |
+| GPS | Integrado en ARM9, ONCRPC `LOC_APIPROG 0x3000008c` |
+| FM | Tavarua, I2C `/dev/i2c-1` + `/dev/radio0` |
 
-Estado actualizado 2026-05-31. Validado con `test_y210.sh --fast`: 54 PASS / 0 FAIL.
-Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
+---
 
-### Arranque / sistema
+## Matriz de estado (CM9 — 2026-06-06)
 
-- Boot completo hasta launcher: **OK**
-- `system_server` estable: **OK**
-- `surfaceflinger` estable: **OK**
-- `mediaserver` estable: **OK**
-- `adb` (USB debugging): **OK**
-- `adb logcat` persistente tras reboot: **OK** (ver `device/huawei/y210/LOGGING_NOTES.md`)
+### Boot / sistema
+
+| Función | Estado | Nota |
+|---|---|---|
+| Boot hasta launcher | **OK** | Trebuchet |
+| `system_server` estable | **OK** | |
+| `surfaceflinger` estable | **OK** | |
+| `mediaserver` estable | **OK** | |
+| `adb` (USB debugging) | **OK** | |
+| `dalvik-cache` limpio | **OK** | Borrar ambos: `/data/dalvik-cache` y `/cache/dalvik-cache` |
 
 ### Pantalla / gráficos
 
-- Framebuffer / UI visible: **OK**
-- Gralloc/Copybit: **OK** (ruta `gralloc.y210` + `copybit.y210` validada)
-- EGL / Adreno 200 (HW accel): **OK** (ver `device/huawei/y210/RENDER_NOTES.md`)
-- Ghosting / corrupción de back-buffer: **OK** (fix `fb_setUpdateRect_noop` en gralloc — ver `RENDER_NOTES.md`)
-- Bug repetición horizontal (imagen 2.5× / "3 columnas"): **OK** (fix `numBuffers=1` en `libgralloc-qsd8k/framebuffer.cpp` — EGL Adreno detecta fd del framebuffer y fuerza stride=128px; single-buffer fuerza PMEM fd → stride=320px correcto. Ver `RENDER_NOTES.md`)
-- Permisos KGSL persistentes: **OK** (`/dev/kgsl-3d0` = `crw-rw-rw- root root` 0666 — regla en `ueventd.huawei.rc` aplicada correctamente)
+| Función | Estado | Nota |
+|---|---|---|
+| Framebuffer / UI visible | **OK** | 320×480 60 Hz, 3 buffers |
+| SurfaceFlinger compositor | **OK** | `debug.sf.hw=1`; renderer Adreno 200 validado en boot |
+| GPU Adreno200 — driver | **OK** | Kernel con `IOCTL_KGSL_TIMESTAMP_EVENT`; sin errores genlock/KGSL en boot |
+| GPU Adreno200 — apps (HW GL) | **Parcial** | Gallery creó contexto EGL HW; falta prueba amplia de apps 3D |
+| hwcomposer | **No** | Desactivado: desalinea touch. SurfaceFlinger usa software |
+| Gralloc / copybit | **Parcial** | Local `gralloc.msm7x27a.so` con native handle CAF (`sNumFds=2`); no mezclar HALs e400/proprietarios |
+| Ghosting / SWAP_RECTANGLE | **OK** | Fix `fb_setUpdateRect_noop` — ver `RENDER_NOTES.md` |
 
-### Input / UI
+### Input
 
-- Touchscreen: **OK**
-- Multitouch: **OK** (se observa protocolo MT tipo A vía `SYN_MT_REPORT`)
-- Botones físicos (power/vol+/vol-): **OK**
-- Botones táctiles/capacitivos (atrás/home/menú): **OK**
-- Teclas virtuales (en pantalla): **N/A**
-- Rotación automática: **OK** (fix de permisos `/dev/accel` en `KERNEL_NOTES.md`)
+| Función | Estado | Nota |
+|---|---|---|
+| Touchscreen | **OK** | melfas-touchscreen.idc instalado |
+| Multitouch (MT tipo A) | **OK** | |
+| Botones físicos (power/vol) | **OK** | |
+| Botones capacitivos (home/back/menú) | **OK** | |
 
 ### Luces / vibración
 
-- Backlight (pantalla / brillo): **OK**
-- LED de notificación: **OK** (RGB)
-- Vibrador: **OK** (UI “vibrar al tocar” funciona; sysfs: `/sys/class/timed_output/vibrator/enable`)
+| Función | Estado | Nota |
+|---|---|---|
+| Backlight | **OK** | |
+| LED notificación (RGB) | **OK** | |
+| Vibrador | **OK** | `/sys/class/timed_output/vibrator/enable` |
 
 ### Audio
 
-- Salida speaker: **OK** (ver `device/huawei/y210/AUDIO_NOTES.md`)
-- Salida auriculares: **Parcial** (funciona, pero volumen percibido bajo vs stock; prueba `persist.sys.headset-postproc` sin cambio)
-- Micrófono (grabación): **OK** (ver `device/huawei/y210/AUDIO_NOTES.md`)
-- Llamadas (voz): **Parcial** (downlink OK; uplink/mic requiere validar tras el overlay de `send_mic_mute_to_AudioManager`)
-- Audio por Bluetooth (A2DP/SCO): **Pendiente**
-- Radio FM (app): **Parcial** (JNI OK, `/dev/radio0` abre, `hw.fm.init=1` confirmado; pendiente validar audio en auriculares)
-  - Fixes aplicados (2026-04-26): `FmRxControls.java` (V4L2_CID_AUDIO_MUTE boolean), `AudioHardware.cpp` routing → `SND_DEVICE_HEADSET` + abre `/dev/msm_fm`, `android_hardware_fm_qcom.cpp` controles privados best-effort + `spawnFmInit()` incondicional.
-  - `init.qcom.fm.sh` usa `exec 3</dev/radio0; sleep 1` antes de `fm_qsoc_patches` para evitar race condition IRQ tavarua (XFR=98).
-  - Validar con `adb shell getprop hw.fm.init` (esperado `1`) y `adb shell getprop hw.fm.version` (esperado `67240453`).
-  - Ver `device/huawei/y210/FM_NOTES.md` para diagnóstico completo.
+| Función | Estado | Nota |
+|---|---|---|
+| Salida speaker | **OK** | `audio.primary.y210.so` wraps `libaudio.so` |
+| Salida auriculares | **Parcial** | Funciona; volumen percibido bajo vs stock |
+| Micrófono (grabación) | **OK** | |
+| Llamadas voz (downlink) | **OK** | |
+| Llamadas voz (uplink/mic) | **Parcial** | Requiere `send_mic_mute_to_AudioManager=true` en overlay |
+| A2DP / SCO Bluetooth | **Pendiente** | |
+| Radio FM — init | **Parcial** | `hw.fm.init=1` OK; audio pendiente de validar. Ver `FM_NOTES.md` |
 
-### Wi‑Fi
+### Wi-Fi
 
-- Encender desde UI: **OK** (validación histórica; ver `device/huawei/y210/WIFI_NOTES.md`)
-- Escaneo/Asociación/DHCP: **OK** (según `README.md`)
-- Validación post-flash limpio (sin staging manual): **Pendiente** (ver `device/huawei/y210/WIFI_NOTES.md`)
-- Wi-Fi tethering (hotspot): **OK** (validado con 2 clientes simultáneos; NAT sobre rmnet0 funcionando)
+| Función | Estado | Nota |
+|---|---|---|
+| Encender / scan / asociar | **OK** | AR6003 / ath6kl, interfaz `eth0` |
+| DHCP | **OK** | |
+| Redes persistentes | **OK** | wpa_supplicant.conf no se sobreescribe en boot |
+| Wi-Fi tethering (hotspot) | **OK** | NAT sobre rmnet0 |
 
 ### Bluetooth
 
-- Encender desde UI: **OK** (ver `device/huawei/y210/BLUETOOTH_NOTES.md`)
-- `hci0 UP RUNNING`: **OK**
-- Pairing + audio: **Pendiente**
+| Función | Estado | Nota |
+|---|---|---|
+| Encender / HCI up | **OK** | `hci0 UP RUNNING` |
+| Pairing | **OK** | |
+| Audio BT (A2DP/SCO) | **Pendiente** | |
 
 ### Sensores
 
-- Acelerómetro (LIS3DH): **OK**
-- Gravity sensor: **OK** (virtual / derivado del acelerómetro)
-- Linear acceleration: **OK** (virtual / derivado del acelerómetro)
-- Proximidad: **N/A** (el Y210 no tiene sensor de proximidad)
-- Luz/ALS: **N/A** (el Y210 no tiene sensor de luz)
-- Brújula: **N/A**
+| Función | Estado | Nota |
+|---|---|---|
+| Acelerómetro (LIS3DH) | **OK** | |
+| Gravity / Linear acceleration | **OK** | Virtual |
+| Proximidad | **N/A** | Hardware no presente |
+| Luz / ALS | **N/A** | Hardware no presente |
+| Brújula | **N/A** | Hardware no presente |
 
 ### GPS
 
-- Motor RPC (`Loc API RPC client initialized`): **OK**
-- XTRA (efemérides asistidas): **OK** (41 partes inyectadas al arranque)
-- NTP / UTC injection: **OK**
-- AGPS (UMTS SLP): **OK**
-- Fix real con satélites: **Pendiente** (requiere prueba al aire libre; motor RPC/XTRA/AGPS OK en logcat)
+| Función | Estado | Nota |
+|---|---|---|
+| Motor RPC (Loc API) | **OK** | `Loc API RPC client initialized` |
+| XTRA (efemérides asistidas) | **OK** | 41 partes inyectadas |
+| NTP / UTC injection | **OK** | |
+| AGPS (UMTS SLP) | **OK** | |
+| Fix real (satélites) | **Pendiente** | Requiere prueba al aire libre |
 
-Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
+Ver `GPS_NOTES.md` para detalles y bugs resueltos.
 
 ### Cámara
 
-- App cámara abre: **OK** (ver `device/huawei/y210/CAMERA_NOTES.md`)
-- Preview foto `640x480` color portrait: **OK** (NV21→RGB565 SW, orientation=90)
-- Captura de foto: **OK** (SHUTTER + RAW_IMAGE 294912 B + COMPRESSED_IMAGE ~55 KB JPEG)
-- `close → reopen`: **OK** (fix vtable slot 26 en `release()`)
-- Switch foto↔video: **OK** (keep() eliminado, stop/restart en setPreviewDisplay)
-- Preview video: **OK** (H.263 352×288, mismo pipeline NV21→RGB565)
-- Grabación video H.263 352×288 15fps: **OK** (MP4 guardado en galería)
-- Video HD (640×480): **N/A** (sin driver kernel `msm_vidc_enc`)
+| Función | Estado | Nota |
+|---|---|---|
+| Camera HAL (ICS API) | **No** | El wrapper CM7 no es compatible con ICS CameraHardwareInterface. Requiere port. |
+
+Ver `CAMERA_NOTES.md` para el análisis del wrapper CM7 y la estrategia de port a ICS.
 
 ### Almacenamiento / USB
 
-- `/data` / escritura: **OK**
-- SDCard (montaje): **OK**
-- Modo almacenamiento masivo USB (UMS): **OK**
+| Función | Estado | Nota |
+|---|---|---|
+| `/data` / escritura | **OK** | |
+| SDCard (montaje) | **OK** | |
+| UMS (almacenamiento masivo USB) | **OK** | |
 
 ### Radio / Telefonía (RIL)
 
-- Baseband / operador / señal: **OK** (ver `device/huawei/y210/RIL_NOTES.md`)
-- IMEI (`service call iphonesubinfo 1`): **OK**
-- Llamadas (voz): **OK** (entrante/saliente)
-- SMS: **OK** (enviar/recibir)
-- Datos móviles: **OK** (HSPA; rmnet0 con IP real validada en Claro Perú)
-- Agitación / ghost de iconos en status bar: **OK** (4 fixes — ver `device/huawei/y210/STATUSBAR_NOTES.md`: doble-poll RIL cases 1033/1037, guard `setIcon()` en StatusBarManagerService, copy-back + buffer zeroing en Surface.cpp, copybit MDP para strip 320×25)
+| Función | Estado | Nota |
+|---|---|---|
+| Baseband / operador / señal | **OK** | Claro Perú 71610, HSPA, baseband 109808 |
+| IMEI | **OK** | `service call iphonesubinfo 1` |
+| Llamadas (voz) | **OK** | Entrante y saliente |
+| SMS | **OK** | Enviar y recibir |
+| Datos móviles (rmnet0) | **OK** | HSPA; IP real validada |
 
-### Energía
+Ver `RIL_NOTES.md` para arquitectura QCRIL y fixes de datos.
 
-- Suspensión / apagar‑encender pantalla: **OK** (`early_suspend`/`late_resume` sin errores; dispositivo entra en suspend correctamente; wakeups periódicos de modem `rpcrouter_smd_xprt` son normales)
-- Deep sleep real: **OK** (validado sin USB: 5 min en suspend continuo; WiFi entra en WoW mode; único wakeup periódico es modem `rpcrouter_smd_xprt` cada ~2 min — normal para HSPA)
+### Energía / Performance
 
-## Comandos rápidos por área (para acompañar logs)
+| Función | Estado | Nota |
+|---|---|---|
+| Suspensión / pantalla on-off | **OK** | `early_suspend`/`late_resume` OK |
+| Deep sleep | **OK** | WiFi WoW, wakeup periódico modem normal |
+| RAM disponible (baseline) | ~15 MB libres | Tras deshabilitar apps innecesarias |
+| LMK | Ajustado | 32 MB threshold para apps fondo. Ver `PERFORMANCE_NOTES.md` |
 
-Ejecutar estos desde host:
+### Sistema de salud / misc
 
-- Estado general:
-  - `adb shell getprop`
-  - `adb logcat -v threadtime -d`
-  - `adb shell dmesg`
+| Función | Estado | Nota |
+|---|---|---|
+| BatteryStats | **OK** | `xt_qtaguid` portado al kernel desde e400. `/proc/net/xt_qtaguid/stats` disponible con datos reales. |
+| `installd` | **OK** | `class main` en `init.y210.rc` |
+| Screenshot (power menu) | **No** | Ver `SCREENSHOT_NOTES.md` — FBO no disponible en PixelFlinger |
+| Teclado LatinIME | **OK** | Fix overlay: `keyboardHeight` 1.285in→1.1in, `keyboard_bottom_padding` 4.669%→1% |
 
-- Gráficos:
-  - `adb shell dumpsys SurfaceFlinger`
-  - `adb shell "ls -l /system/lib/egl && cat /system/lib/egl/egl.cfg"`
-  - `adb shell "ls -l /dev/kgsl-3d0 /dev/pmem /dev/graphics/fb0 2>/dev/null"`
+---
 
-- Wi‑Fi:
-  - `adb shell dumpsys wifi`
-  - `adb shell getprop | grep -i wifi`
-  - `adb shell "ls -l /data/misc/wifi /system/etc/wifi /system/etc/firmware/wlan 2>/dev/null"`
+## Apps de sistema deshabilitadas (2026-06-03)
 
-- Bluetooth:
-  - `adb shell getprop | grep -i bt`
-  - `adb shell "hciconfig -a; hcitool dev 2>/dev/null"`
-
-- Sensores:
-  - `adb shell "ls -l /dev/accel; getevent -lp 2>/dev/null | head -n 80"`
-
-- Cámara:
-  - `adb shell dumpsys media.camera`
-  - `adb logcat -v threadtime -d | grep -iE \"camera|cameraservice|QualcommCamera|Y210CameraWrapper\"`
-
-- Audio:
-  - `adb shell dumpsys media.audio_flinger`
-  - `adb shell getprop | grep -i audio`
-
-## Smoke test automatizado
+Para liberar RAM en el dispositivo de 165 MB usables:
 
 ```bash
-# Ejecutar desde raíz del árbol CM7 con dispositivo conectado:
-bash device/huawei/y210/tools/test_y210.sh            # completo
-bash device/huawei/y210/tools/test_y210.sh --fast     # omite suspensión
-bash device/huawei/y210/tools/test_y210.sh --section camera
-
-# Resultado esperado (CM7, con SIM): 54 PASS / 0 FAIL / 5 SKIP / 24 MANUAL
-# Log detallado: /tmp/test_y210_YYYYMMDD_HHMMSS.log
+adb shell pm disable com.android.email
+adb shell pm disable com.android.exchange
+adb shell pm disable com.cyanogenmod.updater
+adb shell pm disable com.bel.android.dspmanager
+adb shell pm disable com.android.voicedialer
 ```
 
-## Recolección “log general” (un solo comando)
+Estas apps suman ~100 MB de RAM comprometida sin ofrecer valor en este dispositivo.
 
-Usar el script `collect_y210_debug.sh` en la raíz de este repo para generar
-un bundle completo (propiedades, logcat, dumpsys claves, nodos, etc.).
+---
+
+## Bugs pendientes (por prioridad)
+
+1. **Camera HAL** — port del wrapper a ICS CameraHardwareInterface. Bloqueante para cámara.
+2. **Screenshot (power menu)** — SurfaceFlinger requiere FBO que PixelFlinger no tiene. Ver `SCREENSHOT_NOTES.md`.
+3. **GPU HW GL / Adreno EGL** — boot HW validado; falta prueba amplia de apps 3D y estabilidad prolongada.
+4. **hwcomposer** — desactivado por alineación de touch; investigar causa raíz.
+5. ~~**BatteryStats**~~ — resuelto: `xt_qtaguid` portado al kernel.
+6. **Audio uplink** — validar que el overlay `send_mic_mute_to_AudioManager` funciona en llamadas.
+7. **FM audio** — init OK, audio en auriculares pendiente.
+8. **BT audio** — A2DP/SCO no validado.
+9. **GPS fix real** — motor OK, falta prueba al aire libre.
+
+---
+
+## Comandos diagnóstico rápido
+
+```bash
+# Estado general
+adb shell getprop | grep -E "ro.build|gsm.operator|init.svc"
+adb logcat -v time -d 2>&1 | tail -50
+adb shell dmesg 2>&1 | tail -30
+
+# Memoria
+adb shell cat /proc/meminfo | grep -E "MemTotal|MemFree|Cached"
+adb shell ps | awk '{print $5, $9}' | sort -rn | head -20
+
+# LMK actual
+adb shell cat /sys/module/lowmemorykiller/parameters/minfree
+adb shell cat /sys/module/lowmemorykiller/parameters/adj
+
+# GPU
+adb shell ls -l /dev/kgsl-3d0 /dev/pmem_gpu0 /dev/pmem_gpu1
+adb logcat -d | grep -i "EGL\|SurfaceFlinger\|flags ="
+
+# RIL
+adb shell getprop gsm.version.baseband
+adb shell getprop gsm.operator.alpha
+adb shell getprop init.svc.ril-daemon
+```
+
+## Build commands
+
+```bash
+# Build completo
+cd /home/chijure/cm9
+source build/envsetup.sh && lunch cm_y210-userdebug
+make -j$(nproc)
+
+# OTA ZIP
+make otapackage -j$(nproc)
+# Resultado: out/target/product/y210/cm_y210-ota-eng.*.zip
+
+# Instalar
+adb push out/target/product/y210/cm_y210-ota-eng.*.zip /sdcard/update.zip
+# Luego instalar desde TWRP
+
+# Solo boot.img
+make -j$(nproc) bootimage
+fastboot flash boot out/target/product/y210/boot.img
+```

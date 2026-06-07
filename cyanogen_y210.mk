@@ -21,7 +21,11 @@ PRODUCT_BRAND := Huawei
 PRODUCT_DEVICE := y210
 PRODUCT_MODEL := HUAWEI Y210-0151
 PRODUCT_MANUFACTURER := HUAWEI
-PRODUCT_PROPERTY_OVERRIDES += \
+# Camera blob (libcamera.y210.so) reads ro.build.product to detect the sensor
+# target type. It only recognizes msm7625a/msm7627a/etc., not "y210".
+# PRODUCT_DEFAULT_PROPERTY_OVERRIDES → /default.prop, loaded before build.prop,
+# so this wins over the buildinfo.sh-generated ro.build.product=y210.
+PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
     ro.build.product=msm7625a
 
 # RIL / Telephony

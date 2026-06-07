@@ -1,4 +1,22 @@
-# Wi-Fi Notes
+# Wi-Fi Notes (CM9 / ICS)
+
+## Estado CM9 (2026-06-03)
+
+| Función | Estado |
+|---|---|
+| Encender / scan / asociar / DHCP | **OK** |
+| Redes persistentes (wpa_supplicant.conf) | **OK** |
+| Wi-Fi tethering (hotspot) | **OK** |
+| Driver / firmware | AR6003 / ath6kl, interfaz `eth0` |
+
+El firmware del AR6003 se copia en `on post-fs-data` porque `wlan_detect` no
+reconoce `MSM7225A_Y210` y no lo copia automáticamente. Fix en `init.huawei.rc`.
+
+---
+
+## Historial CM7 (arquitectura aplica en CM9)
+
+
 
 ## Estado actual
 

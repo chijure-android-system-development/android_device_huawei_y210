@@ -1,3 +1,20 @@
+# FM Radio (Y210) — CM9/ICS
+
+## Estado CM9 (2026-06-03)
+
+| Función | Estado |
+|---|---|
+| Init / calibración (`hw.fm.init`) | **Parcial** — OK en CM7; sin validar en CM9 |
+| Audio FM en auriculares | **Pendiente** |
+
+Los fixes de `init.qcom.fm.sh`, routing de audio y V4L2 mute se aplicaron en CM7.
+En CM9 la pila de audio cambió (ICS audio HAL), validar que el routing de FM
+sigue funcionando con la nueva arquitectura `audio.primary.y210.so`.
+
+---
+
+## Historial CM7
+
 # FM Radio (Y210)
 
 ## Estado actual (CM7)

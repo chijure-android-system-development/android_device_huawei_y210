@@ -335,6 +335,7 @@ struct private_handle_t {
 
     // file-descriptors
     int     fd;
+    int     genlockHandle; // genlock handle to be dup'd by the binder
     // ints
     int     magic;
     int     flags;
@@ -349,18 +350,17 @@ struct private_handle_t {
     int     format;
     int     width;
     int     height;
-    int     genlockHandle; // local sync token; kept out of the fd array
     int     genlockPrivFd; // local fd of the genlock device.
 
 #ifdef __cplusplus
     static const int sNumInts = 12;
-    static const int sNumFds = 1;
+    static const int sNumFds = 2;
     static const int sMagic = 'gmsm';
 
     private_handle_t(int fd, int size, int flags, int bufferType, int format, int width, int height) :
-        fd(fd), magic(sMagic), flags(flags), size(size), offset(0),
+        fd(fd), genlockHandle(-1), magic(sMagic), flags(flags), size(size), offset(0),
         bufferType(bufferType), base(0), gpuaddr(0), pid(getpid()), format(format),
-        width(width), height(height), genlockHandle(-1), genlockPrivFd(-1)
+        width(width), height(height), genlockPrivFd(-1)
     {
         version = sizeof(native_handle);
         numInts = sNumInts;

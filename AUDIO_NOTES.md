@@ -1,3 +1,36 @@
+Y210 Audio Notes (CM9 / ICS)
+
+## Estado CM9 (2026-06-03)
+
+| Función | Estado |
+|---|---|
+| Speaker (UI + media) | **OK** |
+| Auriculares | **Parcial** — volumen bajo vs stock |
+| Micrófono (grabación) | **OK** |
+| Llamadas downlink | **OK** |
+| Llamadas uplink (mic) | **Parcial** — requiere overlay `send_mic_mute_to_AudioManager` |
+| BT Audio (A2DP/SCO) | **Pendiente** |
+| FM audio | **Pendiente** |
+
+### Arquitectura en CM9
+
+En ICS el HAL de audio usa la nueva interfaz `audio_hw_device_t` (C-style).
+El port usa el wrapper `audio_hw_hal.cpp` como adaptador:
+
+```
+AudioFlinger (ICS)
+  └─ audio.primary.y210.so (audio_hw_hal.cpp — adaptador ICS→GB)
+       └─ libaudio.so (AudioHardware.cpp — HAL GB original del Y210)
+            └─ msm7x27 audio drivers (msm_audio, msm_snd RPC)
+```
+
+`BOARD_USES_AUDIO_LEGACY` **NO debe estar** en BoardConfig.mk — hace que
+`channels >> 2 = 0`, lo que rompe DirectOutput.
+
+---
+
+## Historial CM7 (misma libaudio, aplica en CM9)
+
 Y210 CM7 Audio Notes
 ====================
 

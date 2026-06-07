@@ -1,3 +1,17 @@
+Huawei Y210 — Logging Notes (CM9/ICS)
+
+## Estado CM9 (2026-06-03)
+
+`adb logcat` funciona directamente tras boot en CM9 sin necesidad del menú de
+Project Menu de Huawei. El kernel de CM9 expone `/dev/log/main` por defecto.
+
+Los binarios `sleeplogcat`, `kmsgcat`, `diag_mdlog` y `libprojectmenu.so`
+siguen instalados en el prebuilt pero no son necesarios para logging básico.
+
+---
+
+## Historial CM7
+
 Huawei Y210 logging notes
 
 Resumen

@@ -1,5 +1,5 @@
 # /*< DTS2011062406362 zhangyancun 2010110629 begin */
-# Just 256M memory use /init.mem.rc is here
+# 256M physical but ~165MB usable (ARM9 modem reserves ~80MB)
 # Define the oom_adj values for the classes of processes that can be
 # killed by the kernel.  These are used in ActivityManagerService.
 on boot
@@ -18,13 +18,13 @@ on boot
 
     setprop ro.FOREGROUND_APP_MEM 1536
     setprop ro.VISIBLE_APP_MEM 2048
-    setprop ro.PERCEPTIBLE_APP_MEM 2048
-    setprop ro.HOME_APP_MEM 3072
-    setprop ro.HEAVY_WEIGHT_APP_MEM 3072
-    setprop ro.SECONDARY_SERVER_MEM 4096
-    setprop ro.BACKUP_APP_MEM 4096
-    setprop ro.HIDDEN_APP_MEM 5120
-    setprop ro.EMPTY_APP_MEM 6144
+    setprop ro.PERCEPTIBLE_APP_MEM 3072
+    setprop ro.HOME_APP_MEM 4096
+    setprop ro.HEAVY_WEIGHT_APP_MEM 4096
+    setprop ro.SECONDARY_SERVER_MEM 5120
+    setprop ro.BACKUP_APP_MEM 5120
+    setprop ro.HIDDEN_APP_MEM 6144
+    setprop ro.EMPTY_APP_MEM 8192
 
 # Write value must be consistent with the above properties.
 # Note that the driver only supports 6 slots, so we have combined some of
@@ -34,5 +34,6 @@ on boot
 
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
-    write /sys/module/lowmemorykiller/parameters/minfree 1536,2048,3072,4096,5120,6144
+    # Tuned for 165MB usable RAM: kill background apps at 32MB free instead of 24MB
+    write /sys/module/lowmemorykiller/parameters/minfree 1536,2048,3072,5120,6144,8192
 # /* DTS2011062406362 zhangyancun 2010110629 end >*/

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Y210 HVGA (320x480): reduce keyboard height so all 4 rows fit without clipping.
+         Default 1.285in (206px) + 40px suggestions = 246px causes bottom row to clip.
+         1.1in (176px) + 40px = 216px fits comfortably in the 455px content area. -->
+    <dimen name="keyboardHeight">1.1in</dimen>
+    <fraction name="maxKeyboardHeight">90%p</fraction>
+    <fraction name="minKeyboardHeight">-50%p</fraction>
+    <!-- Reduce bottom padding from 4.669% to 1% to minimize wasted space -->
+    <fraction name="keyboard_bottom_padding">1.0%p</fraction>
+    <fraction name="keyboard_bottom_padding_ics">1.0%p</fraction>
+</resources>

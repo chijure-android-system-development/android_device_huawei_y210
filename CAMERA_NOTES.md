@@ -1,5 +1,27 @@
 # Camera Notes — Huawei Y210
 
+## Estado CM9 (2026-06-03) — BLOQUEADO
+
+La cámara **no funciona** en CM9. El wrapper `Y210CameraWrapper.cpp` fue
+escrito contra la API `CameraHardwareInterface` de CM7 (GB/Gingerbread). En
+ICS esa interfaz cambió: el HAL ahora es `camera_module_t` / `camera_device_t`
+(HAL3 C-style API), incompatible con la API C++ de GB.
+
+**Trabajo necesario:**
+- Reimplementar el wrapper como `camera_module_t` + `camera_device_t` (HAL ICS)
+- Reusar la lógica de vtable dispatch del blob (slots +2) y los fixes de pmem_adsp
+- El blob stock `libcamera.y210.so` en sí no cambió — el problema es solo el glue
+
+Ver `CAMERA_NOTES.md` (sección CM7 abajo) para el análisis completo del blob
+(vtable misalignment, pmem_adsp, startPreview retry, etc.) que sirve de base
+para el port a ICS.
+
+---
+
+## Historial CM7 (base para el port ICS)
+
+
+
 ## Estado (2026-05-31) — ESTABLE
 
 Ciclo completo de cámara confirmado en dispositivo:

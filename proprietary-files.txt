@@ -59,6 +59,7 @@ lib/hw/copybit.msm7k.so
 lib/hw/gralloc.msm7k.so
 lib/hw/sensors.default.so
 lib/libgsl.so
+lib/libsc-a2xx.so
 
 ## Camera proprietaries
 lib/liboemcamera.so

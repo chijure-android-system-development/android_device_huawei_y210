@@ -1,5 +1,8 @@
 $(call inherit-product, $(SRC_TARGET_DIR)/product/languages_full.mk)
 
+# Device-specific resource overlays (lockscreen layout, etc.)
+PRODUCT_PACKAGE_OVERLAYS := device/huawei/y210/overlay
+
 # The gps config appropriate for this device
 $(call inherit-product, device/common/gps/gps_us_supl.mk)
 
@@ -33,7 +36,7 @@ PRODUCT_PACKAGES += \
 
 # Other
 PRODUCT_PACKAGES += \
-    lights.msm7x27a \
+    lights.y210 \
     gps.y210 \
     FileManager \
     libos_compat

@@ -1,3 +1,17 @@
+StatusBar (Y210 / CM9/ICS) — notas de debug
+
+## Estado CM9 (2026-06-03)
+
+Los fixes de CM7 (doble-poll RIL, guard setIcon, copy-back zeroing, copybit MDP)
+fueron portados. La statusbar no muestra ghosting.
+
+El RIL en CM9 usa `HuaweiQualcommRIL` (no `QualcommNoSimReadyRIL`), por lo que
+el fix 1 del doble-poll puede necesitar revisión si reaparece el síntoma.
+
+---
+
+## Historial CM7
+
 StatusBar (Y210 / CM7) - notas de debug
 
 ## Síntoma

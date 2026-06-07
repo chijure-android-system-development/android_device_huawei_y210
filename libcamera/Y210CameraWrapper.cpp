@@ -1,983 +1,777 @@
 /*
- * Copyright (C) 2026
+ * Y210CameraWrapper.cpp — ICS camera HAL for Huawei Y210
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Bridges the GB Qualcomm blob (libcamera.y210.so) to the ICS
+ * camera_device_t / camera_module_t C HAL interface.
+ *
+ * Pattern based on LG e400 CM9 cameraHal.cpp (same MSM7225A SoC).
+ * Y210-specific additions:
+ *  - takePicture dispatched manually (blob slot 21, arg sp<ISurface>)
+ *  - startPreview retry after 250ms (ISP busy after close/reopen)
+ *  - Parameter sanitization (blob rejects 432x320, antibanding, etc.)
+ *  - storeTargetType() primed via getCameraInfo() before first open
  */
 
-#define LOG_TAG "Y210CameraWrapper"
+//#define LOG_NDEBUG 0
+#define LOG_TAG "Y210Camera"
 
-#include <assert.h>
-#include <dlfcn.h>
-#include <string.h>
-#include <unistd.h>
+#include "Y210CameraInterface.h"
 
+#include <hardware/camera.h>
+#include <hardware/hardware.h>
 #include <cutils/properties.h>
-#include <utils/Log.h>
-#include <camera/CameraParameters.h>
-#include <surfaceflinger/ISurface.h>
+#include <fcntl.h>
+#include <linux/ioctl.h>
+#include <linux/msm_mdp.h>
+#include <gralloc_priv.h>
+#include <ui/GraphicBufferMapper.h>
+#include <cutils/log.h>
+#include <ui/Rect.h>
+#include <utils/Vector.h>
 
-#include "Y210CameraWrapper.h"
-
-namespace android {
-
-// Some Huawei/Qualcomm camera blobs reference non-AOSP static CameraParameters
-// symbols. Export the minimum set the Y210 blob needs so dlopen() succeeds even
-// if libcamera_client was built with --gc-sections and drops unused statics.
-const char CameraParameters::VIDEO_HFR_OFF[] = "off";
-static const void* const kForceExportVideoHfrOff __attribute__((used)) =
-        CameraParameters::VIDEO_HFR_OFF;
-
-typedef sp<CameraHardwareInterface> (*OpenCamFunc)(int, int);
-typedef void (*GetCamInfoFunc)(int, struct CameraInfo*);
-typedef int (*GetNumCamerasFunc)();
-
-static OpenCamFunc gOpenCameraHardware = NULL;
-static GetCamInfoFunc gGetCameraInfo = NULL;
-static GetNumCamerasFunc gGetNumberOfCameras = NULL;
-static void *gLibHandle = NULL;
-static void *gOemCameraHandle = NULL;
-
-static void ensureY210CameraLibOpened();
-
-// The stock Huawei/Qualcomm blob appears to read a second "camera mode"
-// argument from HAL_openCameraHardware(). When we call it as a one-arg
-// function, r1 contains garbage and the blob logs a random mode before
-// failing startCamera(). Make the mode selectable at runtime so we can
-// probe which Huawei/Qualcomm value this blob expects.
-static const int kDefaultCameraMode = 1;
-
-static int getCameraMode()
-{
-    char value[PROPERTY_VALUE_MAX];
-    property_get("persist.camera.mode", value, "");
-    if (value[0] == '\0') {
-        return kDefaultCameraMode;
-    }
-
-    char *end = NULL;
-    long mode = strtol(value, &end, 0);
-    if (end == value || *end != '\0') {
-        LOGW("Invalid persist.camera.mode value '%s', falling back to %d",
-                value, kDefaultCameraMode);
-        return kDefaultCameraMode;
-    }
-
-    return static_cast<int>(mode);
-}
-
-static bool shouldDelegateSetParameters()
-{
-    char value[PROPERTY_VALUE_MAX];
-    property_get("debug.camera.delegate_setparams", value, "");
-    if (value[0] != '\0') {
-        return strcmp(value, "0") != 0;
-    }
-
-    property_get("camera.delegate_setparams", value, "");
-    if (value[0] != '\0') {
-        return strcmp(value, "0") != 0;
-    }
-
-    property_get("persist.camera.delegate_setparams", value, "1");
-    return strcmp(value, "0") != 0;
-}
-
-// ---------------------------------------------------------------------------
-// Blob vtable layout
-//
-// The Y210 blob (QualcommCameraHardware) was compiled against a Qualcomm
-// CameraHardwareInterface that inserts 2 extra methods between cancelAutoFocus
-// and takePicture.  CM7's CameraHardwareInterface (without USE_GETBUFFERINFO /
-// CAF_CAMERA_GB_REL) has:
-//
-//   slot 18: cancelAutoFocus
-//   slot 19: takePicture      ← CM7
-//   slot 20: cancelPicture    ← CM7
-//   slot 21: setParameters    ← CM7
-//   slot 22: getParameters    ← CM7
-//   slot 23: sendCommand      ← CM7
-//   slot 24: release          ← CM7
-//   slot 25: dump             ← CM7
-//
-// The blob's vtable is:
-//   slot 18: cancelAutoFocus  (same)
-//   slot 19: [Qualcomm extra1]
-//   slot 20: [Qualcomm extra2]
-//   slot 21: takePicture      ← blob
-//   slot 22: cancelPicture    ← blob
-//   slot 23: setParameters    ← blob  (already fixed, confirmed working)
-//   slot 24: getParameters    ← blob
-//   slot 25: sendCommand      ← blob
-//   slot 26: release          ← blob
-//   slot 27: dump             ← blob
-//
-// Every C++ virtual dispatch for methods at CM7 slot >= 19 calls the wrong
-// blob slot.  We bypass the vtable and call the correct slot directly.
-// ---------------------------------------------------------------------------
-
-static inline void** blobVptr(const sp<CameraHardwareInterface>& iface)
-{
-    return *reinterpret_cast<void***>(iface.get());
-}
-
-static const char* cameraMsgName(int32_t msgType)
-{
-    switch (msgType) {
-    case CAMERA_MSG_ERROR: return "ERROR";
-    case CAMERA_MSG_SHUTTER: return "SHUTTER";
-    case CAMERA_MSG_FOCUS: return "FOCUS";
-    case CAMERA_MSG_ZOOM: return "ZOOM";
-    case CAMERA_MSG_PREVIEW_FRAME: return "PREVIEW_FRAME";
-    case CAMERA_MSG_VIDEO_FRAME: return "VIDEO_FRAME";
-    case CAMERA_MSG_POSTVIEW_FRAME: return "POSTVIEW_FRAME";
-    case CAMERA_MSG_RAW_IMAGE: return "RAW_IMAGE";
-    case CAMERA_MSG_COMPRESSED_IMAGE: return "COMPRESSED_IMAGE";
-    default: return "UNKNOWN";
-    }
-}
-
-static bool isDelegatableParameterKey(const char* key)
-{
-    if (key == NULL) {
-        return false;
-    }
-
-    return !strcmp(key, CameraParameters::KEY_PREVIEW_SIZE) ||
-            !strcmp(key, CameraParameters::KEY_PICTURE_SIZE) ||
-            !strcmp(key, CameraParameters::KEY_PREVIEW_FORMAT) ||
-            !strcmp(key, CameraParameters::KEY_PICTURE_FORMAT) ||
-            !strcmp(key, CameraParameters::KEY_JPEG_QUALITY) ||
-            !strcmp(key, CameraParameters::KEY_ROTATION) ||
-            !strcmp(key, CameraParameters::KEY_VIDEO_SIZE) ||
-            !strcmp(key, CameraParameters::KEY_VIDEO_FRAME_FORMAT) ||
-            !strcmp(key, "recording-hint");
-}
-
-wp<CameraHardwareInterface> Y210CameraWrapper::sSingleton;
-
-static void ensureY210CameraLibOpened()
-{
-    if (gLibHandle != NULL) {
-        return;
-    }
-
-    gLibHandle = ::dlopen("libcamera.y210.so", RTLD_NOW);
-    if (gLibHandle == NULL) {
-        LOGE("dlopen(libcamera.y210.so) failed: %s", dlerror());
-        return;
-    }
-
-    // The proprietary QualcommCameraHardware in libcamera.y210.so attempts to dlopen
-    // liboemcamera.so during createInstance(). On this stack we observe dlopen failures
-    // with an empty dlerror(), leading to a broken construction and a crash during
-    // cleanup. Preload the OEM library globally so the blob sees it as already loaded.
-    gOemCameraHandle = ::dlopen("liboemcamera.so", RTLD_NOW | RTLD_GLOBAL);
-    if (gOemCameraHandle == NULL) {
-        const char *error = dlerror();
-        LOGE("dlopen(liboemcamera.so) failed: %s", error ? error : "(null)");
-    }
-
-    gOpenCameraHardware = reinterpret_cast<OpenCamFunc>(
-            ::dlsym(gLibHandle, "HAL_openCameraHardware"));
-    gGetCameraInfo = reinterpret_cast<GetCamInfoFunc>(
-            ::dlsym(gLibHandle, "HAL_getCameraInfo"));
-    gGetNumberOfCameras = reinterpret_cast<GetNumCamerasFunc>(
-            ::dlsym(gLibHandle, "HAL_getNumberOfCameras"));
-
-    if (gOpenCameraHardware == NULL || gGetCameraInfo == NULL
-            || gGetNumberOfCameras == NULL) {
-        LOGE("Failed to resolve camera HAL entry points");
-    } else {
-        LOGI("Resolved camera HAL entry points from libcamera.y210.so");
-        // The blob's startCamera() reads a global targetType set by storeTargetType(),
-        // which is called from getCameraInfo(). Android 2.3 CameraService does not
-        // guarantee getCameraInfo is called before the first HAL_openCameraHardware,
-        // so we prime it here to avoid the "Unable to determine target type" failure.
-        struct CameraInfo info;
-        memset(&info, 0, sizeof(info));
-        gGetCameraInfo(0, &info);
-        LOGI("Target type primed via getCameraInfo");
-    }
-}
-
-extern "C" int HAL_getNumberOfCameras()
-{
-    ensureY210CameraLibOpened();
-    return gGetNumberOfCameras ? gGetNumberOfCameras() : 1;
-}
-
-extern "C" void HAL_getCameraInfo(int cameraId, struct CameraInfo* cameraInfo)
-{
-    ensureY210CameraLibOpened();
-    if (gGetCameraInfo) {
-        gGetCameraInfo(cameraId, cameraInfo);
-    } else if (cameraInfo) {
-        cameraInfo->facing = CAMERA_FACING_BACK;
-        cameraInfo->orientation = 0;
-    }
-    // The sensor is physically mounted at 90° in the phone (landscape sensor
-    // in a portrait device). orientation=90 tells the camera app to rotate
-    // the preview 90° clockwise so it appears upright in portrait mode.
-    if (cameraInfo) {
-        cameraInfo->orientation = 90;
-    }
-}
-
-extern "C" sp<CameraHardwareInterface> HAL_openCameraHardware(int cameraId)
-{
-    return Y210CameraWrapper::createInstance(cameraId);
-}
-
-sp<CameraHardwareInterface> Y210CameraWrapper::createInstance(int cameraId)
-{
-    LOGI("createInstance(cameraId=%d) entry", cameraId);
-    if (sSingleton != NULL) {
-        sp<CameraHardwareInterface> hardware = sSingleton.promote();
-        if (hardware != NULL) {
-            sp<Y210CameraWrapper> wrapper =
-                    static_cast<Y210CameraWrapper*>(hardware.get());
-            if (wrapper != NULL && wrapper->isUsable()) {
-                LOGI("createInstance returning existing singleton %p", hardware.get());
-                return hardware;
-            }
-            LOGW("createInstance dropping stale singleton %p", hardware.get());
-        }
-        sSingleton.clear();
-    }
-
-    ensureY210CameraLibOpened();
-    if (gOpenCameraHardware == NULL) {
-        LOGE("createInstance failed: gOpenCameraHardware is NULL");
-        return NULL;
-    }
-
-    sp<Y210CameraWrapper> hardware(new Y210CameraWrapper(cameraId));
-    if (hardware == NULL) {
-        return NULL;
-    }
-
-    if (!hardware->isUsable()) {
-        LOGE("createInstance aborting: delegated camera HAL rejected mode %d",
-                getCameraMode());
-        return NULL;
-    }
-
-    sSingleton = hardware;
-    LOGI("createInstance created wrapper=%p iface=%p",
-            hardware.get(), hardware->mLibInterface.get());
-    return hardware;
-}
-
-Y210CameraWrapper::Y210CameraWrapper(int cameraId)
-    : mCameraId(cameraId),
-      mReleased(false),
-      mPreviewRunning(false),
-      mRecordingRunning(false),
-      mNotifyCb(NULL),
-      mDataCb(NULL),
-      mDataCbTimestamp(NULL),
-      mCallbackUser(NULL),
-      mHasLastGoodParameters(false)
-{
-    LOGI("Y210CameraWrapper ctor cameraId=%d", cameraId);
-    const int cameraMode = getCameraMode();
-    LOGI("Y210CameraWrapper ctor using cameraMode=%d", cameraMode);
-    mLibInterface = gOpenCameraHardware
-            ? gOpenCameraHardware(cameraId, cameraMode)
-            : NULL;
-    LOGI("Y210CameraWrapper ctor iface=%p", mLibInterface.get());
-}
-
-Y210CameraWrapper::~Y210CameraWrapper()
-{
-    LOGI("Y210WRAP: dtor wrapper=%p released=%d iface=%p preview=%d recording=%d",
-            this, mReleased, mLibInterface.get(), mPreviewRunning, mRecordingRunning);
-}
-
-void Y210CameraWrapper::notifyCallbackShim(int32_t msgType, int32_t ext1,
-        int32_t ext2, void* user)
-{
-    Y210CameraWrapper* self = static_cast<Y210CameraWrapper*>(user);
-    if (self == NULL) return;
-    LOGI("Y210WRAP: notify msg=%s(%d) ext1=%d ext2=%d wrapper=%p",
-            cameraMsgName(msgType), msgType, ext1, ext2, self);
-    if (self->mNotifyCb != NULL) {
-        self->mNotifyCb(msgType, ext1, ext2, self->mCallbackUser);
-    }
-}
-
-void Y210CameraWrapper::dataCallbackShim(int32_t msgType,
-        const sp<IMemory>& dataPtr, void* user)
-{
-    Y210CameraWrapper* self = static_cast<Y210CameraWrapper*>(user);
-    if (self == NULL) return;
-    ssize_t size = dataPtr != NULL ? dataPtr->size() : -1;
-    if (msgType != CAMERA_MSG_PREVIEW_FRAME) {
-        LOGI("Y210WRAP: data msg=%s(%d) size=%ld wrapper=%p",
-                cameraMsgName(msgType), msgType, static_cast<long>(size), self);
-    }
-    if (msgType == CAMERA_MSG_COMPRESSED_IMAGE) {
-        // Blob stops preview internally during capture; update our state so
-        // startPreview() is not skipped on the next call.
-        self->mPreviewRunning = false;
-    }
-    if (self->mDataCb != NULL) {
-        self->mDataCb(msgType, dataPtr, self->mCallbackUser);
-    }
-}
-
-void Y210CameraWrapper::dataCallbackTimestampShim(nsecs_t timestamp,
-        int32_t msgType, const sp<IMemory>& dataPtr, void* user)
-{
-    Y210CameraWrapper* self = static_cast<Y210CameraWrapper*>(user);
-    if (self == NULL) return;
-    ssize_t size = dataPtr != NULL ? dataPtr->size() : -1;
-    LOGI("Y210WRAP: data-ts msg=%s(%d) ts=%lld size=%ld wrapper=%p",
-            cameraMsgName(msgType), msgType, static_cast<long long>(timestamp),
-            static_cast<long>(size), self);
-    if (self->mDataCbTimestamp != NULL) {
-        self->mDataCbTimestamp(timestamp, msgType, dataPtr, self->mCallbackUser);
-    }
-}
-
-CameraParameters Y210CameraWrapper::seedParameters() const
-{
-    // Seed a conservative parameter set when the proprietary HAL reports an
-    // empty or corrupt parameter blob. The wrapper always returns a fresh
-    // framework-owned CameraParameters instance so CameraService never needs
-    // to flatten the vendor object's internal String8 storage directly.
-    CameraParameters params;
-    // Keep the synthetic framework-owned preview defaults aligned with the
-    // size that actually produces a visible preview on this legacy blob.
-    params.setPreviewSize(640, 480);
-    params.setPreviewFrameRate(15);
-    params.setPreviewFormat(CameraParameters::PIXEL_FORMAT_YUV420SP);
-    params.setPictureSize(640, 480);
-    params.setPictureFormat(CameraParameters::PIXEL_FORMAT_JPEG);
-    params.set(CameraParameters::KEY_JPEG_QUALITY, "100");
-    params.set(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH, "512");
-    params.set(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT, "384");
-    params.set(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY, "90");
-    params.set(CameraParameters::KEY_FOCUS_MODE, CameraParameters::FOCUS_MODE_AUTO);
-    params.set(CameraParameters::KEY_WHITE_BALANCE,
-            CameraParameters::WHITE_BALANCE_AUTO);
-    params.set(CameraParameters::KEY_EFFECT, CameraParameters::EFFECT_NONE);
-    params.set(CameraParameters::KEY_ROTATION, "0");
-    // 432x320 is NOT in the blob's internal valid-preview-size list;
-    // the blob rejects it with "Invalid preview size requested: 432x320"
-    // and falls back to 640x480, causing a buffer-size mismatch in registerBuffers.
-    params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_SIZES,
-            "640x480,480x320,352x288,240x160,176x144");
-    params.set(CameraParameters::KEY_SUPPORTED_PICTURE_SIZES,
-            "640x480,512x384,320x240");
-    params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATES, "15");
-    // Some vendor blobs reject setParameters() when these are missing.
-    params.set(CameraParameters::KEY_PREVIEW_FPS_RANGE, "5000,31000");
-    params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FPS_RANGE, "(5000,31000)");
-    params.set(CameraParameters::KEY_SUPPORTED_PICTURE_FORMATS,
-            CameraParameters::PIXEL_FORMAT_JPEG);
-    params.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS,
-            CameraParameters::PIXEL_FORMAT_YUV420SP);
-    params.set(CameraParameters::KEY_SUPPORTED_WHITE_BALANCE,
-            CameraParameters::WHITE_BALANCE_AUTO);
-    params.set(CameraParameters::KEY_SUPPORTED_EFFECTS, CameraParameters::EFFECT_NONE);
-    params.set(CameraParameters::KEY_SUPPORTED_FOCUS_MODES,
-            CameraParameters::FOCUS_MODE_AUTO);
-    params.setVideoSize(352, 288);
-    params.set(CameraParameters::KEY_VIDEO_FRAME_FORMAT,
-            CameraParameters::PIXEL_FORMAT_YUV420SP);
-    params.set(CameraParameters::KEY_VIDEO_HIGH_FRAME_RATE,
-            CameraParameters::VIDEO_HFR_OFF);
-    params.set(CameraParameters::KEY_SUPPORTED_VIDEO_HIGH_FRAME_RATE_MODES,
-            CameraParameters::VIDEO_HFR_OFF);
-    params.set(CameraParameters::KEY_SUPPORTED_HFR_SIZES, "352x288");
-    params.set(CameraParameters::KEY_DENOISE, CameraParameters::DENOISE_OFF);
-    params.set(CameraParameters::KEY_SUPPORTED_DENOISE, CameraParameters::DENOISE_OFF);
-    params.set(CameraParameters::KEY_REDEYE_REDUCTION,
-            CameraParameters::REDEYE_REDUCTION_DISABLE);
-    params.set(CameraParameters::KEY_SUPPORTED_REDEYE_REDUCTION,
-            CameraParameters::REDEYE_REDUCTION_DISABLE);
-    params.set("supported-video-sizes", "352x288,320x240,176x144");
-    params.set("preferred-preview-size-for-video", "352x288");
-    return params;
-}
-
-bool Y210CameraWrapper::copyParameterIfPresent(CameraParameters* dst,
-        const CameraParameters& src, const char* key) const
-{
-    if (dst == NULL || key == NULL) {
-        return false;
-    }
-
-    const char* value = src.get(key);
-    if (value == NULL || value[0] == '\0') {
-        return false;
-    }
-
-    // Copy immediately into wrapper-owned storage. src.get() returns a
-    // pointer backed by the vendor CameraParameters object and must not be
-    // allowed to escape this frame.
-    String8 stable(value);
-    dst->set(key, stable.string());
-    return true;
-}
-
-CameraParameters Y210CameraWrapper::sanitizeParameters(
-        const CameraParameters* raw) const
-{
-    CameraParameters safe = seedParameters();
-    if (raw == NULL) {
-        return safe;
-    }
-
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_PREVIEW_SIZE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PREVIEW_SIZES);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_PREVIEW_FORMAT);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_PREVIEW_FRAME_RATE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATES);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_PREVIEW_FPS_RANGE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PREVIEW_FPS_RANGE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_PREVIEW_FRAME_RATE_MODE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATE_MODES);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_PICTURE_SIZE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PICTURE_SIZES);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_PICTURE_FORMAT);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_PICTURE_FORMATS);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_JPEG_QUALITY);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ROTATION);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_FOCUS_MODE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_FOCUS_MODES);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_WHITE_BALANCE);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_SUPPORTED_WHITE_BALANCE);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ANTIBANDING);
-    // Do not propagate supported antibanding lists from the blob; the Y210 blob
-    // rejects antibanding entirely and we don't want to reintroduce it via cache.
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ZOOM);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_MAX_ZOOM);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_ZOOM_RATIOS);
-    copyParameterIfPresent(&safe, *raw,
-            CameraParameters::KEY_ZOOM_SUPPORTED);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_VIDEO_SIZE);
-    copyParameterIfPresent(&safe, *raw, CameraParameters::KEY_VIDEO_FRAME_FORMAT);
-    copyParameterIfPresent(&safe, *raw, "supported-video-sizes");
-    copyParameterIfPresent(&safe, *raw, "preferred-preview-size-for-video");
-
-    return safe;
-}
-
-CameraParameters Y210CameraWrapper::buildDelegatedParameters(
-        const CameraParameters& in) const
-{
-    // Start from seedParameters() so capability keys (preview-size-values, etc.)
-    // are present in the delegated set.  The blob validates KEY_PREVIEW_SIZE against
-    // KEY_SUPPORTED_PREVIEW_SIZES in the same setParameters call; without the latter
-    // it rejects the entire call before applying the size, leaving the blob's internal
-    // preview heap at its previous size and causing registerBuffers ENODEV.
-    CameraParameters out(seedParameters());
-    static const char* kKeys[] = {
-        CameraParameters::KEY_PREVIEW_SIZE,
-        CameraParameters::KEY_PICTURE_SIZE,
-        CameraParameters::KEY_PREVIEW_FORMAT,
-        CameraParameters::KEY_PICTURE_FORMAT,
-        CameraParameters::KEY_JPEG_QUALITY,
-        CameraParameters::KEY_ROTATION,
-        CameraParameters::KEY_WHITE_BALANCE,
-        CameraParameters::KEY_FOCUS_MODE,
-        CameraParameters::KEY_VIDEO_SIZE,
-        CameraParameters::KEY_VIDEO_FRAME_FORMAT,
-        "recording-hint",
-    };
-
-    for (size_t i = 0; i < sizeof(kKeys) / sizeof(kKeys[0]); ++i) {
-        if (!isDelegatableParameterKey(kKeys[i])) {
-            continue;
-        }
-        copyParameterIfPresent(&out, in, kKeys[i]);
-    }
-
-    return out;
-}
-
-const char* Y210CameraWrapper::findFirstPresentParameterKey(
-        const CameraParameters& params,
-        const char* const* keys, size_t keyCount) const
-{
-    for (size_t i = 0; i < keyCount; ++i) {
-        const char* key = keys[i];
-        const char* value = params.get(key);
-        if (value != NULL && value[0] != '\0') {
-            return key;
-        }
-    }
-    return NULL;
-}
-
-void Y210CameraWrapper::logParameterSummary(const char* prefix,
-        const CameraParameters& params) const
-{
-    int previewW = -1;
-    int previewH = -1;
-    int pictureW = -1;
-    int pictureH = -1;
-    params.getPreviewSize(&previewW, &previewH);
-    params.getPictureSize(&pictureW, &pictureH);
-
-    const char* previewFormat = params.get(CameraParameters::KEY_PREVIEW_FORMAT);
-    const char* pictureFormat = params.get(CameraParameters::KEY_PICTURE_FORMAT);
-    const char* focusMode = params.get(CameraParameters::KEY_FOCUS_MODE);
-
-    LOGI("%s preview=%dx%d picture=%dx%d pfmt=%s pictfmt=%s focus=%s",
-            prefix ? prefix : "params",
-            previewW, previewH, pictureW, pictureH,
-            previewFormat ? previewFormat : "<null>",
-            pictureFormat ? pictureFormat : "<null>",
-            focusMode ? focusMode : "<null>");
-}
-
-bool Y210CameraWrapper::isUsable() const
-{
-    return mLibInterface != NULL && !mReleased;
-}
-
-sp<IMemoryHeap> Y210CameraWrapper::getPreviewHeap() const
-{
-    if (!isUsable()) return NULL;
-    sp<IMemoryHeap> heap = mLibInterface->getPreviewHeap();
-    if (heap == NULL) {
-        LOGE("Y210WRAP: getPreviewHeap returns NULL");
-    } else {
-        LOGI("Y210WRAP: getPreviewHeap heap=%p fd=%d size=%u",
-                heap.get(), heap->getHeapID(),
-                static_cast<unsigned>(heap->getSize()));
-    }
-    return heap;
-}
-
-sp<IMemoryHeap> Y210CameraWrapper::getRawHeap() const
-{
-    return isUsable() ? mLibInterface->getRawHeap() : NULL;
-}
-
-void Y210CameraWrapper::setCallbacks(notify_callback notify_cb,
-        data_callback data_cb,
-        data_callback_timestamp data_cb_timestamp,
-        void *user)
-{
-    if (isUsable()) {
-        mNotifyCb = notify_cb;
-        mDataCb = data_cb;
-        mDataCbTimestamp = data_cb_timestamp;
-        mCallbackUser = user;
-        LOGI("Y210WRAP: setCallbacks wrapper=%p notify=%p data=%p dataTs=%p user=%p",
-                this, notify_cb, data_cb, data_cb_timestamp, user);
-        mLibInterface->setCallbacks(
-                notify_cb ? notifyCallbackShim : NULL,
-                data_cb ? dataCallbackShim : NULL,
-                data_cb_timestamp ? dataCallbackTimestampShim : NULL,
-                this);
-    }
-}
-
-void Y210CameraWrapper::enableMsgType(int32_t msgType)
-{
-    if (isUsable()) mLibInterface->enableMsgType(msgType);
-}
-
-void Y210CameraWrapper::disableMsgType(int32_t msgType)
-{
-    if (isUsable()) mLibInterface->disableMsgType(msgType);
-}
-
-bool Y210CameraWrapper::msgTypeEnabled(int32_t msgType)
-{
-    return isUsable() ? mLibInterface->msgTypeEnabled(msgType) : false;
-}
-
-status_t Y210CameraWrapper::startPreview()
-{
-    if (!isUsable()) {
-        LOGE("Y210WRAP: startPreview unusable");
-        return INVALID_OPERATION;
-    }
-
-    CameraParameters params = getParameters();
-    int pw = 0, ph = 0;
-    params.getPreviewSize(&pw, &ph);
-    const char* pf = params.get(CameraParameters::KEY_PREVIEW_FORMAT);
-    LOGI("Y210WRAP: startPreview enter iface=%p preview=%dx%d format=%s previewRunning=%d recording=%d",
-         mLibInterface.get(), pw, ph, pf ? pf : "(null)",
-         mPreviewRunning, mRecordingRunning);
-    status_t rc = mLibInterface->startPreview();
-    if (rc != NO_ERROR && rc != INVALID_OPERATION) {
-        // The camera ISP may be transiently busy if a previous hardware
-        // instance hasn't fully released it yet. Retry once after a short
-        // delay (typically needed after a full close/reopen cycle).
-        LOGW("Y210WRAP: startPreview rc=%d, retrying after 250ms", rc);
-        usleep(250000);
-        rc = mLibInterface->startPreview();
-    }
-    if (rc == NO_ERROR) {
-        mPreviewRunning = true;
-    }
-    LOGI("Y210WRAP: startPreview exit rc=%d previewRunning=%d", rc, mPreviewRunning);
-    return rc;
-}
-
-#ifdef USE_GETBUFFERINFO
-status_t Y210CameraWrapper::getBufferInfo(sp<IMemory>& frame, size_t *alignedSize)
-{
-    return isUsable() ? mLibInterface->getBufferInfo(frame, alignedSize) : INVALID_OPERATION;
-}
+/* ICS CM9 may not define ALOG* macros yet — map to old LOG* */
+#ifndef ALOGE
+#define ALOGE LOGE
+#define ALOGI LOGI
+#define ALOGW LOGW
+#define ALOGD LOGD
+#define ALOGV LOGV
 #endif
+#include <dlfcn.h>
 
-#ifdef CAF_CAMERA_GB_REL
-void Y210CameraWrapper::encodeData()
+#define NO_ERROR 0
+
+struct blitreq {
+    unsigned int count;
+    struct mdp_blit_req req;
+};
+
+using namespace android;
+
+/* Forward declaration of our mapMemory stub (defined in camera_compat.cpp) */
+extern "C" void y210_fixed_mapMemory(void);
+
+/* ---------------------------------------------------------------------------
+ * Global state (single camera device — Y210 has one camera)
+ * ------------------------------------------------------------------------- */
+static camera_notify_callback         gNotifyCb    = NULL;
+static camera_data_callback           gDataCb      = NULL;
+static camera_data_timestamp_callback gDataTsCb    = NULL;
+static camera_request_memory          gGetMemory   = NULL;
+static bool                           gPreviewFramesRequested = false;
+
+static preview_stream_ops_t*          gWindow      = NULL;
+static sp<CameraHardwareInterface>    gCamera;
+static CameraParameters               gCamParams;
+
+static Vector<camera_memory_t*>       gSentFrames;
+
+/* ---------------------------------------------------------------------------
+ * Blob library — entry points resolved via dlsym (not linked at build time)
+ * ------------------------------------------------------------------------- */
+typedef sp<CameraHardwareInterface> (*OpenCamFn)(int cameraId, int mode);
+typedef void (*GetCamInfoFn)(int cameraId, CameraInfo* info);
+typedef int  (*GetNumCamsFn)(void);
+
+static OpenCamFn    gOpenCamera = NULL;
+static GetCamInfoFn gGetCamInfo = NULL;
+static GetNumCamsFn gGetNumCams = NULL;
+
+static void ensureLibLoaded()
 {
-    if (isUsable()) mLibInterface->encodeData();
-}
-#endif
+    if (gOpenCamera) return;
+    /* Expose compat stubs globally so the blob's relocations can find them */
+    void* compat = dlopen("libcamera_compat.so", RTLD_NOW | RTLD_GLOBAL);
+    if (!compat) LOGE("Y210: dlopen libcamera_compat.so: %s", dlerror());
+    else         LOGI("Y210: libcamera_compat.so loaded globally");
+    /* Preload liboemcamera.so globally (blob dlopen-s it internally) */
+    dlopen("liboemcamera.so", RTLD_NOW | RTLD_GLOBAL);
 
-bool Y210CameraWrapper::useOverlay()
-{
-    // Default to non-overlay: the proprietary blob has been observed crashing
-    // while probing overlay metadata on some lifecycles. Keep an explicit
-    // runtime escape hatch for bring-up/testing.
-    char value[PROPERTY_VALUE_MAX];
-    property_get("debug.camera.use_overlay", value, "0");
-    if (strcmp(value, "1") == 0) {
-        return true;
-    }
-    return false;
-}
+    void* handle = dlopen("libcamera.y210.so", RTLD_NOW);
+    if (!handle) { LOGE("Y210: dlopen libcamera.y210.so: %s", dlerror()); return; }
 
-status_t Y210CameraWrapper::setOverlay(const sp<Overlay> &overlay)
-{
-    if (!isUsable()) {
-        return INVALID_OPERATION;
-    }
+    gOpenCamera = (OpenCamFn)   dlsym(handle, "HAL_openCameraHardware");
+    gGetCamInfo = (GetCamInfoFn)dlsym(handle, "HAL_getCameraInfo");
+    gGetNumCams = (GetNumCamsFn)dlsym(handle, "HAL_getNumberOfCameras");
 
-    char value[PROPERTY_VALUE_MAX];
-    property_get("debug.camera.use_overlay", value, "0");
-    if (strcmp(value, "1") != 0) {
-        return INVALID_OPERATION;
-    }
-
-    return mLibInterface->setOverlay(overlay);
-}
-
-void Y210CameraWrapper::stopPreview()
-{
-    if (!isUsable()) {
-        LOGW("Y210WRAP: stopPreview ignored unusable wrapper=%p released=%d iface=%p",
-                this, mReleased, mLibInterface.get());
-        return;
-    }
-    if (!mPreviewRunning) {
-        LOGI("Y210WRAP: stopPreview skip already-stopped wrapper=%p iface=%p",
-                this, mLibInterface.get());
-        return;
-    }
-    LOGI("Y210WRAP: stopPreview enter wrapper=%p iface=%p previewRunning=%d recording=%d",
-            this, mLibInterface.get(), mPreviewRunning, mRecordingRunning);
-    mLibInterface->stopPreview();
-    mPreviewRunning = false;
-    LOGI("Y210WRAP: stopPreview done");
-}
-
-bool Y210CameraWrapper::previewEnabled()
-{
-    bool enabled = isUsable() && mPreviewRunning;
-    return enabled;
-}
-
-status_t Y210CameraWrapper::startRecording()
-{
-    if (!isUsable()) {
-        LOGE("Y210WRAP: startRecording unusable");
-        return INVALID_OPERATION;
-    }
-    CameraParameters params = getParameters();
-    int vw = 0, vh = 0;
-    params.getVideoSize(&vw, &vh);
-    const char* vfmt = params.get(CameraParameters::KEY_VIDEO_FRAME_FORMAT);
-    const char* hint = params.get("recording-hint");
-    LOGI("Y210WRAP: startRecording enter wrapper=%p iface=%p video=%dx%d vfmt=%s hint=%s preview=%d",
-            this, mLibInterface.get(), vw, vh,
-            vfmt ? vfmt : "(null)", hint ? hint : "(null)",
-            mPreviewRunning);
-    status_t rc = mLibInterface->startRecording();
-    if (rc == NO_ERROR) {
-        mRecordingRunning = true;
-    }
-    LOGI("Y210WRAP: startRecording exit rc=%d recordingRunning=%d", rc, mRecordingRunning);
-    return rc;
+    if (!gOpenCamera || !gGetCamInfo || !gGetNumCams)
+        LOGE("Y210: failed to resolve camera entry points");
+    else
+        LOGI("Y210: camera blob loaded OK");
 }
 
-void Y210CameraWrapper::stopRecording()
+/* ---------------------------------------------------------------------------
+ * takePicture — manual vtable dispatch (blob slot 21, ISurface arg)
+ * All other methods use normal C++ virtual dispatch via Y210CameraInterface.h
+ * ------------------------------------------------------------------------- */
+static inline void** blobVptr(const sp<CameraHardwareInterface>& cam)
 {
-    if (!isUsable()) {
-        return;
-    }
-    LOGI("Y210WRAP: stopRecording enter wrapper=%p iface=%p recordingRunning=%d",
-            this, mLibInterface.get(), mRecordingRunning);
-    mLibInterface->stopRecording();
-    mRecordingRunning = false;
-    LOGI("Y210WRAP: stopRecording done");
+    return *reinterpret_cast<void***>(cam.get());
 }
 
-bool Y210CameraWrapper::recordingEnabled()
+static status_t blobTakePicture()
 {
-    bool enabled = isUsable() && mRecordingRunning;
-    return enabled;
-}
-
-void Y210CameraWrapper::releaseRecordingFrame(const sp<IMemory> &mem)
-{
-    if (isUsable()) mLibInterface->releaseRecordingFrame(mem);
-}
-
-status_t Y210CameraWrapper::autoFocus()
-{
-    return isUsable() ? mLibInterface->autoFocus() : INVALID_OPERATION;
-}
-
-status_t Y210CameraWrapper::cancelAutoFocus()
-{
-    return isUsable() ? mLibInterface->cancelAutoFocus() : INVALID_OPERATION;
-}
-
-status_t Y210CameraWrapper::takePicture()
-{
-    if (!isUsable()) {
-        LOGE("Y210WRAP: takePicture ignored unusable wrapper=%p", this);
-        return INVALID_OPERATION;
-    }
-    logParameterSummary("Y210WRAP: takePicture", getParameters());
-    LOGI("Y210WRAP: takePicture enter wrapper=%p iface=%p previewRunning=%d notify=%p data=%p",
-            this, mLibInterface.get(), mPreviewRunning, mNotifyCb, mDataCb);
-
-    // Blob slot 21: takePicture (see vtable layout comment above).
-    // CM7 dispatches takePicture() via slot 19 which maps to Qualcomm extra1 -> crash.
-    // The blob's signature is takePicture(const sp<ISurface>&) — an older Qualcomm HAL
-    // interface that passed the postview surface explicitly.  We pass a null sp<ISurface>;
-    // the blob checks surface.get() != NULL before using it, so postview is skipped but
-    // the JPEG callback is delivered normally.
-    typedef status_t (*BlobTakePictureFn)(void*, const sp<ISurface>&);
-    BlobTakePictureFn fn = reinterpret_cast<BlobTakePictureFn>(blobVptr(mLibInterface)[21]);
+    /* Blob slot 21: takePicture(const sp<ISurface>&)
+     * Pass a null ISurface — blob skips postview but delivers JPEG callbacks. */
+    typedef status_t (*TakePicFn)(void*, const sp<ISurface>&);
+    TakePicFn fn = reinterpret_cast<TakePicFn>(blobVptr(gCamera)[21]);
     sp<ISurface> nullSurface;
-    status_t rc = fn(mLibInterface.get(), nullSurface);
-    LOGI("Y210WRAP: takePicture exit rc=%d", rc);
+    return fn(gCamera.get(), nullSurface);
+}
+
+/* ---------------------------------------------------------------------------
+ * Parameter helpers (from Y210 CM7 wrapper)
+ * ------------------------------------------------------------------------- */
+static CameraParameters seedParameters()
+{
+    CameraParameters p;
+    p.setPreviewSize(640, 480);
+    p.setPreviewFrameRate(15);
+    p.setPreviewFormat(CameraParameters::PIXEL_FORMAT_YUV420SP);
+    p.setPictureSize(640, 480);
+    p.setPictureFormat(CameraParameters::PIXEL_FORMAT_JPEG);
+    p.set(CameraParameters::KEY_JPEG_QUALITY, "100");
+    p.set(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH, "512");
+    p.set(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT, "384");
+    p.set(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY, "90");
+    p.set(CameraParameters::KEY_FOCUS_MODE, CameraParameters::FOCUS_MODE_AUTO);
+    p.set(CameraParameters::KEY_WHITE_BALANCE, CameraParameters::WHITE_BALANCE_AUTO);
+    p.set(CameraParameters::KEY_EFFECT, CameraParameters::EFFECT_NONE);
+    p.set(CameraParameters::KEY_ROTATION, "0");
+    p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_SIZES,
+          "640x480,480x320,352x288,240x160,176x144");
+    p.set(CameraParameters::KEY_SUPPORTED_PICTURE_SIZES,
+          "640x480,512x384,320x240");
+    p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATES, "15");
+    p.set(CameraParameters::KEY_PREVIEW_FPS_RANGE, "5000,31000");
+    p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FPS_RANGE, "(5000,31000)");
+    p.set(CameraParameters::KEY_SUPPORTED_PICTURE_FORMATS,
+          CameraParameters::PIXEL_FORMAT_JPEG);
+    p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS,
+          CameraParameters::PIXEL_FORMAT_YUV420SP);
+    p.set(CameraParameters::KEY_SUPPORTED_WHITE_BALANCE,
+          CameraParameters::WHITE_BALANCE_AUTO);
+    p.set(CameraParameters::KEY_SUPPORTED_EFFECTS, CameraParameters::EFFECT_NONE);
+    p.set(CameraParameters::KEY_SUPPORTED_FOCUS_MODES,
+          CameraParameters::FOCUS_MODE_AUTO);
+    p.setVideoSize(352, 288);
+    p.set(CameraParameters::KEY_VIDEO_FRAME_FORMAT,
+          CameraParameters::PIXEL_FORMAT_YUV420SP);
+    p.set("video-hfr", "off");
+    p.set("video-hfr-values", "off");
+    p.set("supported-video-sizes", "352x288,320x240,176x144");
+    p.set("preferred-preview-size-for-video", "352x288");
+    return p;
+}
+
+static void fixupParameters(CameraParameters& p)
+{
+    /* Force YUV420SP for preview and video — required by TextureManager NV21 path */
+    p.set(CameraParameters::KEY_VIDEO_FRAME_FORMAT,
+          CameraParameters::PIXEL_FORMAT_YUV420SP);
+    p.set(CameraParameters::KEY_PREVIEW_FORMAT,
+          CameraParameters::PIXEL_FORMAT_YUV420SP);
+
+    /* Ensure supported sizes are present */
+    if (!p.get(CameraParameters::KEY_SUPPORTED_PREVIEW_SIZES))
+        p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_SIZES,
+              "640x480,480x320,352x288,240x160,176x144");
+    if (!p.get(CameraParameters::KEY_SUPPORTED_VIDEO_SIZES))
+        p.set(CameraParameters::KEY_SUPPORTED_VIDEO_SIZES,
+              "352x288,320x240,176x144");
+    if (!p.get(CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATES))
+        p.set(CameraParameters::KEY_SUPPORTED_PREVIEW_FRAME_RATES, "15");
+    if (!p.get(CameraParameters::KEY_PREVIEW_FRAME_RATE))
+        p.set(CameraParameters::KEY_PREVIEW_FRAME_RATE, "15");
+    if (!p.get(CameraParameters::KEY_VIDEO_SIZE))
+        p.set(CameraParameters::KEY_VIDEO_SIZE, "352x288");
+    if (!p.get("record-size"))
+        p.set("record-size", "352x288");
+    if (!p.get(CameraParameters::KEY_PREFERRED_PREVIEW_SIZE_FOR_VIDEO))
+        p.set(CameraParameters::KEY_PREFERRED_PREVIEW_SIZE_FOR_VIDEO, "352x288");
+}
+
+/* ---------------------------------------------------------------------------
+ * Preview — push NV21 frames to ANativeWindow via MDP blit (HW path)
+ * Falls back to software copy if MDP blit fails.
+ * Same approach as e400 cameraHal.cpp (same MSM7225A SoC).
+ * ------------------------------------------------------------------------- */
+static bool copyBuffersMDP(int srcFd, int dstFd,
+                            size_t srcOffset, size_t dstOffset,
+                            int srcFormat, int dstFormat,
+                            int w, int h)
+{
+    struct blitreq blit;
+    int fb_fd = open("/dev/graphics/fb0", O_RDWR);
+    if (fb_fd < 0) {
+        ALOGD("Y210: MDP blit: cannot open fb0: %s", strerror(errno));
+        return false;
+    }
+
+    memset(&blit, 0, sizeof(blit));
+    blit.count = 1;
+    blit.req.flags       = 0;
+    blit.req.alpha       = 0xff;
+    blit.req.transp_mask = 0xffffffff;
+
+    blit.req.src.width     = blit.req.dst.width     = w;
+    blit.req.src.height    = blit.req.dst.height    = h;
+    blit.req.src.format    = srcFormat;
+    blit.req.dst.format    = dstFormat;
+    blit.req.src.memory_id = srcFd;
+    blit.req.dst.memory_id = dstFd;
+    blit.req.src.offset    = srcOffset;
+    blit.req.dst.offset    = dstOffset;
+    blit.req.src_rect.w    = blit.req.dst_rect.w = w;
+    blit.req.src_rect.h    = blit.req.dst_rect.h = h;
+
+    bool ok = (ioctl(fb_fd, MSMFB_BLIT, &blit) == 0);
+    if (!ok) ALOGV("Y210: MDP blit failed: %s", strerror(errno));
+    close(fb_fd);
+    return ok;
+}
+
+static void handlePreviewFrame(const sp<IMemory>& dataPtr,
+                                preview_stream_ops_t* win,
+                                camera_request_memory getMemory,
+                                int previewW, int previewH)
+{
+    if (!win || !getMemory) return;
+
+    ssize_t offset;
+    size_t  size;
+    sp<IMemoryHeap> heap = dataPtr->getMemory(&offset, &size);
+
+    /* Request an ANativeWindow buffer in RGBX_8888 (MDP HW blit from NV21) */
+    win->set_usage(win, GRALLOC_USAGE_PRIVATE_0 | GRALLOC_USAGE_SW_READ_OFTEN);
+    if (win->set_buffers_geometry(win, previewW, previewH,
+                                   HAL_PIXEL_FORMAT_RGBX_8888) != 0) {
+        ALOGW("Y210: set_buffers_geometry failed");
+        return;
+    }
+
+    int32_t stride;
+    buffer_handle_t* bufHandle = NULL;
+    if (win->dequeue_buffer(win, &bufHandle, &stride) != 0) return;
+    if (win->lock_buffer(win, bufHandle) != 0) {
+        win->cancel_buffer(win, bufHandle);
+        return;
+    }
+
+    const private_handle_t* priv =
+        reinterpret_cast<const private_handle_t*>(*bufHandle);
+
+    bool blitOk = copyBuffersMDP(heap->getHeapID(), priv->fd,
+                                  (size_t)offset, (size_t)priv->offset,
+                                  MDP_Y_CBCR_H2V2, MDP_BGRA_8888,
+                                  previewW, previewH);
+
+    if (!blitOk) {
+        /* Software fallback: memcpy NV21 into the gralloc buffer.
+         * The gralloc buffer is RGBX_8888 so this will look wrong, but
+         * keeps the pipeline alive until MDP blit is confirmed working. */
+        GraphicBufferMapper& mapper = GraphicBufferMapper::get();
+        android::Rect bounds(previewW, previewH);
+        void* dst;
+        if (mapper.lock(*bufHandle, GRALLOC_USAGE_SW_WRITE_OFTEN,
+                         bounds, &dst) == 0) {
+            memcpy(dst, (uint8_t*)heap->base() + offset,
+                   (size < (size_t)(previewW * previewH * 4))
+                   ? size : (size_t)(previewW * previewH * 4));
+            mapper.unlock(*bufHandle);
+        }
+    }
+
+    win->enqueue_buffer(win, bufHandle);
+}
+
+/* ---------------------------------------------------------------------------
+ * GB callback shims
+ * ------------------------------------------------------------------------- */
+static void notifyShim(int32_t msg, int32_t ext1, int32_t ext2, void* user)
+{
+    if (gNotifyCb) gNotifyCb(msg, ext1, ext2, user);
+}
+
+static camera_memory_t* genClientData(const sp<IMemory>& dataPtr, void* user)
+{
+    ssize_t offset;
+    size_t  size;
+    sp<IMemoryHeap> heap = dataPtr->getMemory(&offset, &size);
+    camera_memory_t* mem = gGetMemory(-1, size, 1, user);
+    if (mem) memcpy(mem->data, (uint8_t*)heap->base() + offset, size);
+    return mem;
+}
+
+static void dataShim(int32_t msg, const sp<IMemory>& data, void* user)
+{
+    /* For non-preview msgs (or when preview frames are externally requested),
+     * deliver to framework via data callback */
+    if ((msg != CAMERA_MSG_PREVIEW_FRAME || gPreviewFramesRequested)
+            && gDataCb && gGetMemory) {
+        camera_memory_t* mem = genClientData(data, user);
+        if (mem) {
+            gDataCb(msg, mem, 0, NULL, user);
+            mem->release(mem);
+        }
+    }
+
+    if (msg == CAMERA_MSG_PREVIEW_FRAME) {
+        int pw, ph;
+        gCamParams.getPreviewSize(&pw, &ph);
+        if (pw > 0 && ph > 0)
+            handlePreviewFrame(data, gWindow, gGetMemory, pw, ph);
+    }
+}
+
+static void dataTsShim(nsecs_t ts, int32_t msg,
+                        const sp<IMemory>& data, void* user)
+{
+    if (!gDataTsCb || !gGetMemory) return;
+    camera_memory_t* mem = genClientData(data, user);
+    if (mem) {
+        gSentFrames.push_back(mem);
+        gDataTsCb(ts, msg, gSentFrames.top(), 0, user);
+        gCamera->releaseRecordingFrame(data);
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * camera_device_ops_t implementations
+ * ------------------------------------------------------------------------- */
+static int y210_set_preview_window(camera_device_t* /*dev*/,
+                                    preview_stream_ops_t* window)
+{
+    gWindow = window;
+    return 0;
+}
+
+static void y210_set_callbacks(camera_device_t* /*dev*/,
+                                camera_notify_callback         notify_cb,
+                                camera_data_callback           data_cb,
+                                camera_data_timestamp_callback data_cb_ts,
+                                camera_request_memory          get_memory,
+                                void*                          user)
+{
+    gNotifyCb  = notify_cb;
+    gDataCb    = data_cb;
+    gDataTsCb  = data_cb_ts;
+    gGetMemory = get_memory;
+    gCamera->setCallbacks(notifyShim, dataShim, dataTsShim, user);
+}
+
+static void y210_enable_msg_type(camera_device_t* /*dev*/, int32_t msg)
+{
+    if (msg & CAMERA_MSG_PREVIEW_FRAME)
+        gPreviewFramesRequested = true;
+    gCamera->enableMsgType(msg);
+}
+
+static void y210_disable_msg_type(camera_device_t* /*dev*/, int32_t msg)
+{
+    if (msg & CAMERA_MSG_PREVIEW_FRAME)
+        gPreviewFramesRequested = false;
+    if (msg == CAMERA_MSG_VIDEO_FRAME) {
+        /* Release any stale recording frames */
+        for (size_t i = 0; i < gSentFrames.size(); i++)
+            gSentFrames[i]->release(gSentFrames[i]);
+        gSentFrames.clear();
+    }
+    gCamera->disableMsgType(msg);
+}
+
+static int y210_msg_type_enabled(camera_device_t* /*dev*/, int32_t msg)
+{
+    return gCamera->msgTypeEnabled(msg) ? 1 : 0;
+}
+
+static int y210_start_preview(camera_device_t* /*dev*/)
+{
+    LOGI("Y210: start_preview");
+
+    /* Patch MemoryHeapPmem vtable[7] to fix the mapMemory calling-convention mismatch.
+     *
+     * Root cause: the GB blob calls mapMemory with GB's convention:
+     *   r0 = MemoryHeapPmem* (this),  r1 = offset,  r2 = size
+     * but at the call site the blob passes:
+     *   r0 = MemoryHeapPmem* (correct), r1 = vptr (garbage), r2 = fn_ptr (garbage)
+     * because it doesn't explicitly set r1/r2 before blx r2 at blob:0x16e30.
+     *
+     * ICS's mapMemory then does r4 = r1 (= vptr), [r4, #0] (= vtable_entry[0] = destructor),
+     * and vtable[11] of that = bytes from code section = garbage → crash.
+     *
+     * Fix: replace vtable[7] (mapMemory slot) with our stub that:
+     *   1. Receives correct this in r0
+     *   2. Calls ICS's createMemory directly via vtable[11] with proper args
+     *
+     * Vtable file offsets in this libbinder.so build:
+     *   Primary vtable base: file 0x27208 (destructor1 at vtable[0])
+     *   vtable[7]  = mapMemory = file 0x27224 → our patch target
+     *   vtable[11] = createMemory = file 0x27234
+     *   MemoryHeapPmemD1Ev at file 0x1dbd4
+     */
+    {
+        void* mhpd1 = dlsym(RTLD_DEFAULT, "_ZN7android14MemoryHeapPmemD1Ev");
+        if (mhpd1) {
+            uintptr_t libbinder_base = ((uintptr_t)mhpd1 & ~1u) - 0x1dbd4u;
+            LOGI("Y210: libbinder base = 0x%x", (unsigned)libbinder_base);
+
+            volatile uintptr_t* vtable =
+                (volatile uintptr_t*)(libbinder_base + 0x27208);
+
+            LOGI("Y210: vtable[7]=mapMemory=0x%x  vtable[11]=createMemory=0x%x",
+                 (unsigned)vtable[7], (unsigned)vtable[11]);
+
+            /* GCC ARM already encodes the THUMB bit in function pointers.
+             * Do NOT add 1 — the pointer already has bit 0 set for THUMB. */
+            uintptr_t stub = (uintptr_t)y210_fixed_mapMemory;
+
+            uintptr_t page = (libbinder_base + 0x27208 + 7*4) & ~0xfffu;
+            mprotect((void*)page, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
+            vtable[7] = stub; /* replace mapMemory */
+            mprotect((void*)page, 4096, PROT_READ | PROT_EXEC);
+            LOGI("Y210: vtable[7] patched → our mapMemory stub 0x%x",
+                 (unsigned)stub);
+        } else {
+            LOGE("Y210: MemoryHeapPmemD1 not found: %s", dlerror());
+        }
+    }
+
+    gCamera->enableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+
+    status_t rc = gCamera->startPreview();
+    LOGI("Y210: start_preview blob returned rc=%d (0=OK)", rc);
+    if (rc != 0) {
+        LOGW("Y210: start_preview rc=%d, retry...", rc);
+        usleep(250000);
+        rc = gCamera->startPreview();
+        LOGI("Y210: start_preview retry rc=%d", rc);
+    }
     return rc;
 }
 
-status_t Y210CameraWrapper::cancelPicture()
+static void y210_stop_preview(camera_device_t* /*dev*/)
 {
-    if (!isUsable()) {
-        return INVALID_OPERATION;
-    }
-    LOGI("Y210WRAP: cancelPicture enter wrapper=%p iface=%p", this, mLibInterface.get());
+    gCamera->disableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+    gCamera->stopPreview();
+}
 
-    // Blob slot 22: cancelPicture (see vtable layout comment above).
-    typedef status_t (*BlobCancelPictureFn)(void*);
-    BlobCancelPictureFn fn = reinterpret_cast<BlobCancelPictureFn>(blobVptr(mLibInterface)[22]);
-    status_t rc = fn(mLibInterface.get());
-    LOGI("Y210WRAP: cancelPicture exit rc=%d", rc);
+static int y210_preview_enabled(camera_device_t* /*dev*/)
+{
+    /* Always report NOT enabled so CameraService always calls start_preview.
+     * The blob marks mCameraRunning=1 after getCameraInfo()->startCamera(),
+     * which would cause startPreviewMode() to return early without calling
+     * our HAL. The blob's startPreview() is idempotent — safe to call again. */
+    return 0;
+}
+
+static int y210_store_meta_data_in_buffers(camera_device_t* /*dev*/, int /*en*/)
+{
+    return (int)INVALID_OPERATION;
+}
+
+static int y210_start_recording(camera_device_t* /*dev*/)
+{
+    gCamera->enableMsgType(CAMERA_MSG_VIDEO_FRAME);
+    gCamera->startRecording();
+    return NO_ERROR;
+}
+
+static void y210_stop_recording(camera_device_t* /*dev*/)
+{
+    gCamera->disableMsgType(CAMERA_MSG_VIDEO_FRAME);
+    gCamera->stopRecording();
+}
+
+static int y210_recording_enabled(camera_device_t* /*dev*/)
+{
+    return gCamera->recordingEnabled() ? 1 : 0;
+}
+
+static void y210_release_recording_frame(camera_device_t* /*dev*/,
+                                          const void* opaque)
+{
+    if (!opaque) return;
+    for (size_t i = 0; i < gSentFrames.size(); i++) {
+        if (gSentFrames[i]->data == opaque) {
+            gSentFrames[i]->release(gSentFrames[i]);
+            gSentFrames.removeAt(i);
+            return;
+        }
+    }
+    ALOGW("Y210: release_recording_frame: unknown opaque %p", opaque);
+}
+
+static int y210_auto_focus(camera_device_t* /*dev*/)
+{
+    gCamera->autoFocus();
+    return NO_ERROR;
+}
+
+static int y210_cancel_auto_focus(camera_device_t* /*dev*/)
+{
+    gCamera->cancelAutoFocus();
+    return NO_ERROR;
+}
+
+static int y210_take_picture(camera_device_t* /*dev*/)
+{
+    /* Enable all capture callbacks before taking the picture */
+    gCamera->enableMsgType(CAMERA_MSG_SHUTTER |
+                            CAMERA_MSG_POSTVIEW_FRAME |
+                            CAMERA_MSG_RAW_IMAGE |
+                            CAMERA_MSG_COMPRESSED_IMAGE);
+    /* Manual dispatch to blob slot 21: takePicture(const sp<ISurface>&) */
+    return blobTakePicture();
+}
+
+static int y210_cancel_picture(camera_device_t* /*dev*/)
+{
+    return gCamera->cancelPicture();
+}
+
+static int y210_set_parameters(camera_device_t* /*dev*/, const char* parms)
+{
+    ALOGV("Y210: set_parameters: %s", parms ? parms : "(null)");
+    if (!parms) return (int)BAD_VALUE;
+
+    String8 str(parms);
+    gCamParams.unflatten(str);
+
+    /* Remap 432x320 → 480x320: blob rejects 432x320 internally */
+    int pw, ph;
+    gCamParams.getPreviewSize(&pw, &ph);
+    if (pw == 432 && ph == 320) {
+        gCamParams.setPreviewSize(480, 320);
+        ALOGD("Y210: remapped preview 432x320 → 480x320");
+    }
+
+    /* Strip parameters the blob rejects to avoid blocking the whole call */
+    gCamParams.remove(CameraParameters::KEY_SCENE_MODE);
+    gCamParams.remove(CameraParameters::KEY_ANTIBANDING);
+    gCamParams.remove(CameraParameters::KEY_FLASH_MODE);
+    gCamParams.remove("focus-areas");
+    gCamParams.remove("metering-areas");
+    gCamParams.remove(CameraParameters::KEY_EXPOSURE_COMPENSATION);
+    gCamParams.remove(CameraParameters::KEY_PREVIEW_FPS_RANGE);
+
+    gCamera->setParameters(gCamParams);
+    return NO_ERROR;
+}
+
+static char* y210_get_parameters(camera_device_t* /*dev*/)
+{
+    ALOGV("Y210: get_parameters");
+    gCamParams = gCamera->getParameters();
+    fixupParameters(gCamParams);
+    String8 str = gCamParams.flatten();
+    char* rc = strdup(str.string());
+    ALOGV("Y210: get_parameters returning %p: %s", rc, rc ? rc : "");
     return rc;
 }
 
-status_t Y210CameraWrapper::dump(int fd, const Vector<String16> &args) const
+static void y210_put_parameters(camera_device_t* /*dev*/, char* parms)
 {
-    if (!isUsable()) {
-        return INVALID_OPERATION;
-    }
-    // Blob slot 27: dump (see vtable layout comment above).
-    typedef status_t (*BlobDumpFn)(void*, int, const Vector<String16>&);
-    BlobDumpFn fn = reinterpret_cast<BlobDumpFn>(blobVptr(mLibInterface)[27]);
-    return fn(mLibInterface.get(), fd, args);
+    free(parms);
 }
 
-status_t Y210CameraWrapper::setParameters(const CameraParameters& params)
+static int y210_send_command(camera_device_t* /*dev*/,
+                              int32_t cmd, int32_t arg0, int32_t arg1)
 {
-    if (!isUsable()) {
-        return INVALID_OPERATION;
-    }
-    static const char* kBlockedKeys[] = {
-        CameraParameters::KEY_SCENE_MODE,
-        CameraParameters::KEY_ANTIBANDING,
-        CameraParameters::KEY_FLASH_MODE,
-        CameraParameters::KEY_EXPOSURE_COMPENSATION,
-        CameraParameters::KEY_WHITE_BALANCE,
-        CameraParameters::KEY_PREVIEW_FPS_RANGE,
-        "focus-areas",
-        "metering-areas",
-    };
-    CameraParameters patched(params);
-    if (patched.get(CameraParameters::KEY_PREVIEW_SIZE) == NULL) {
-        patched.setPreviewSize(480, 320);
-    }
-    if (patched.get(CameraParameters::KEY_PICTURE_SIZE) == NULL) {
-        patched.setPictureSize(640, 480);
-    }
-    if (patched.get(CameraParameters::KEY_PREVIEW_FORMAT) == NULL) {
-        patched.setPreviewFormat(CameraParameters::PIXEL_FORMAT_YUV420SP);
-    }
-    if (patched.get(CameraParameters::KEY_PICTURE_FORMAT) == NULL) {
-        patched.setPictureFormat(CameraParameters::PIXEL_FORMAT_JPEG);
-    }
-    LOGI("Y210WRAP: setParameters enter wrapper=%p iface=%p preview=%d recording=%d",
-            this, mLibInterface.get(), mPreviewRunning, mRecordingRunning);
-    logParameterSummary("setParameters incoming", patched);
-    CameraParameters safe = sanitizeParameters(&patched);
-    mLastGoodParameters = safe;
-    mHasLastGoodParameters = true;
+    return gCamera->sendCommand(cmd, arg0, arg1);
+}
 
-    if (!shouldDelegateSetParameters()) {
-        LOGW("setParameters skipping delegated blob call");
-        return NO_ERROR;
-    }
+static void y210_release(camera_device_t* /*dev*/)
+{
+    ALOGI("Y210: release");
+    for (size_t i = 0; i < gSentFrames.size(); i++)
+        gSentFrames[i]->release(gSentFrames[i]);
+    gSentFrames.clear();
+    gCamera->release();
+}
 
-    CameraParameters delegated = buildDelegatedParameters(safe);
+static int y210_dump(camera_device_t* /*dev*/, int fd)
+{
+    Vector<String16> args;
+    return gCamera->dump(fd, args);
+}
 
-    // The blob's ISP does not support 432x320 ("Invalid preview size requested: 432x320");
-    // it rejects the entire setParameters call and stays at 640x480, causing a buffer-size
-    // mismatch when registerBuffers is called with 432x320 surface buffers.
-    // Remap 432x320 -> 480x320 (a standard size the blob accepts) both in the delegated
-    // params sent to the blob AND in the cache returned by getParameters(), so the camera
-    // service allocates matching-size buffers for registerBuffers.
-    int delegatedPrevW = 0, delegatedPrevH = 0;
-    delegated.getPreviewSize(&delegatedPrevW, &delegatedPrevH);
-    bool remappedPreviewSize = false;
-    if (delegatedPrevW == 432 && delegatedPrevH == 320) {
-        delegated.setPreviewSize(480, 320);
-        remappedPreviewSize = true;
-        LOGI("Y210WRAP: setParameters remapping preview 432x320->480x320 (blob rejects 432x320)");
-    }
-
-    logParameterSummary("setParameters delegate-pre", delegated);
-    // Blob slot 23: setParameters (see vtable layout comment above).
-    // CM7 dispatches setParameters() via slot 21 which maps to blob's takePicture() -> SIGSEGV.
-    typedef status_t (*BlobSetParamFn)(void*, const CameraParameters&);
-    BlobSetParamFn fn = reinterpret_cast<BlobSetParamFn>(blobVptr(mLibInterface)[23]);
-    status_t rc = fn(mLibInterface.get(), delegated);
-    LOGI("Y210WRAP: setParameters rc=%d", rc);
-
-    if (remappedPreviewSize) {
-        mLastGoodParameters.setPreviewSize(480, 320);
-        LOGI("Y210WRAP: setParameters updated cache preview to 480x320 to match blob");
-    }
-
-    if (rc != NO_ERROR) {
-        const char* suspect = findFirstPresentParameterKey(
-                patched, kBlockedKeys, sizeof(kBlockedKeys) / sizeof(kBlockedKeys[0]));
-        LOGW("Y210WRAP: setParameters blob rejected rc=%d suspect=%s, preserving cache",
-                rc, suspect ? suspect : "<allowlist-or-vendor-key>");
+static int camera_device_close(hw_device_t* device)
+{
+    ALOGI("Y210: camera_device_close");
+    camera_device_t* cam = reinterpret_cast<camera_device_t*>(device);
+    if (gCamera != NULL) gCamera.clear();
+    if (cam) {
+        if (cam->ops) free(cam->ops);
+        free(cam);
     }
     return NO_ERROR;
 }
 
-CameraParameters Y210CameraWrapper::getParameters() const
+static camera_device_ops_t y210_ops = {
+    set_preview_window:          y210_set_preview_window,
+    set_callbacks:               y210_set_callbacks,
+    enable_msg_type:             y210_enable_msg_type,
+    disable_msg_type:            y210_disable_msg_type,
+    msg_type_enabled:            y210_msg_type_enabled,
+    start_preview:               y210_start_preview,
+    stop_preview:                y210_stop_preview,
+    preview_enabled:             y210_preview_enabled,
+    store_meta_data_in_buffers:  y210_store_meta_data_in_buffers,
+    start_recording:             y210_start_recording,
+    stop_recording:              y210_stop_recording,
+    recording_enabled:           y210_recording_enabled,
+    release_recording_frame:     y210_release_recording_frame,
+    auto_focus:                  y210_auto_focus,
+    cancel_auto_focus:           y210_cancel_auto_focus,
+    take_picture:                y210_take_picture,
+    cancel_picture:              y210_cancel_picture,
+    set_parameters:              y210_set_parameters,
+    get_parameters:              y210_get_parameters,
+    put_parameters:              y210_put_parameters,
+    send_command:                y210_send_command,
+    release:                     y210_release,
+    dump:                        y210_dump,
+};
+
+/* ---------------------------------------------------------------------------
+ * camera_module_t ops
+ * ------------------------------------------------------------------------- */
+int CameraHAL_GetCamInfo(int camera_id, struct camera_info* info)
 {
-    if (!isUsable()) {
-        LOGW("getParameters called on unusable wrapper");
-        if (mHasLastGoodParameters) {
-            return mLastGoodParameters;
+    /* Don't load the blob here — it may crash if RPC services aren't up yet.
+     * Return fixed info; orientation is corrected at open time anyway. */
+    (void)camera_id;
+    info->facing      = CAMERA_FACING_BACK;
+    info->orientation = 90; /* sensor mounted 90° in portrait phone */
+    return NO_ERROR;
+}
+
+static int get_number_of_cameras_impl(void)
+{
+    return 1; /* Y210 has one rear camera; don't load blob at startup */
+}
+
+static int camera_device_open(const hw_module_t* module, const char* name,
+                               hw_device_t** device)
+{
+    int camera_id = atoi(name);
+    LOGI("Y210: camera_device_open id=%d", camera_id);
+
+    ensureLibLoaded();
+    if (!gOpenCamera) { LOGE("Y210: blob not loaded"); return -ENOSYS; }
+
+    /* Prime the blob: set gCamTargetType = 1 (TARGET_MSM7625A) directly.
+     *
+     * The blob's storeTargetType() reads ro.build.product and uses strncmp(n=7)
+     * to categorize the platform, then strncmp(n=8) against a hardcoded
+     * "msm7625a" literal to set the final type=1.  Since ro.build.product=y210
+     * never matches either comparison, gCamTargetType stays at TARGET_INVALID=7.
+     *
+     * Fix: resolve storeTargetType via dlsym, compute the fixed offset to
+     * gCamTargetType (0x133d6 bytes ahead in the same .so), and write 1 directly.
+     * The offset is constant for this specific blob version (md5 verified).
+     *
+     * Offset derivation (from disassembly):
+     *   storeTargetType VA = 0xc968 (LOAD1)
+     *   gCamTargetType  VA = 0x1fd3e (LOAD2)
+     *   delta            = 0x1fd3e - 0xc968 = 0x133d6
+     */
+    {
+        /* Prime the blob BSS fields that HAL_openCameraHardware checks.
+         *
+         * getCameraInfo() would normally fill these, but it opens the camera
+         * control FD and leaves it open.  When startPreviewInternal() later
+         * tries to open preview PMEM buffers, the driver rejects the second
+         * open → MemoryHeapPmem::mapMemory crashes at a bad function pointer.
+         *
+         * Instead, write the required BSS fields directly:
+         *
+         *   storeTargetType VA = 0xc968
+         *   gCamTargetType  VA = 0x1fd3e  delta = 0x133d6  value = 1
+         *   camera_count    VA = 0x1fe3c  delta = 0x134d4  value = 1
+         *   modes_supported VA = 0x1fe40  delta = 0x134d8  value = 5
+         *   camera_id[0]    VA = 0x1fe44  delta = 0x134dc  value = 0 (BSS)
+         *
+         * modes_supported=5 is read from getCameraInfo log ("modes_supported: 5")
+         * and passed to the mode-check in HAL_openCameraHardware:
+         *   tst camera_mode, modes_supported → must be != 0.
+         */
+        void* storeTypeSym = dlsym(RTLD_DEFAULT,
+            "_ZN7android22QualcommCameraHardware15storeTargetTypeEv");
+        if (storeTypeSym) {
+            uintptr_t fn = (uintptr_t)storeTypeSym & ~(uintptr_t)1;
+
+            volatile int* gCamTargetType =
+                reinterpret_cast<volatile int*>(fn + 0x133d6);
+            volatile int* camera_count =
+                reinterpret_cast<volatile int*>(fn + 0x134d4);
+            volatile int* modes_supported =
+                reinterpret_cast<volatile int*>(fn + 0x134d8);
+
+            *gCamTargetType   = 1; /* TARGET_MSM7625A */
+            *camera_count     = 1; /* one camera     */
+            *modes_supported  = 5; /* sensor modes_supported from getCameraInfo */
+
+            LOGI("Y210: BSS primed: targetType=1 count=1 modes=5 (fn=%p)", (void*)fn);
+        } else {
+            LOGE("Y210: storeTargetType symbol not found: %s", dlerror());
         }
-        return seedParameters();
     }
 
-    if (mHasLastGoodParameters) {
-        logParameterSummary("getParameters cached", mLastGoodParameters);
-        return mLastGoodParameters;
+    /* Read camera mode from property (default 1 = normal) */
+    char value[PROPERTY_VALUE_MAX];
+    property_get("persist.camera.mode", value, "1");
+    int mode = atoi(value);
+
+    gCamera = gOpenCamera(camera_id, mode);
+    if (gCamera == NULL) {
+        LOGE("Y210: HAL_openCameraHardware returned NULL (id=%d mode=%d)",
+              camera_id, mode);
+        return -ENODEV;
     }
 
-    // The proprietary Huawei/Qualcomm blob crashes inside its getParameters()
-    // path (via cancelPicture()/mutex handling) before the framework can even
-    // flatten the returned map. Seed a stable framework-owned parameter set
-    // and let subsequent successful setParameters() calls refresh the cache.
-    CameraParameters safe = seedParameters();
-    mLastGoodParameters = safe;
-    mHasLastGoodParameters = true;
-    logParameterSummary("getParameters seeded", safe);
-    return safe;
+    /* Seed parameter cache */
+    gCamParams = seedParameters();
+
+    camera_device_t* cam_dev = (camera_device_t*)malloc(sizeof(*cam_dev));
+    camera_device_ops_t* cam_ops = (camera_device_ops_t*)malloc(sizeof(*cam_ops));
+    if (!cam_dev || !cam_ops) {
+        if (cam_dev)  free(cam_dev);
+        if (cam_ops)  free(cam_ops);
+        gCamera.clear();
+        return -ENOMEM;
+    }
+    memset(cam_dev,  0, sizeof(*cam_dev));
+    memcpy(cam_ops, &y210_ops, sizeof(y210_ops));
+
+    cam_dev->common.tag     = HARDWARE_DEVICE_TAG;
+    cam_dev->common.version = 0;
+    cam_dev->common.module  = const_cast<hw_module_t*>(module);
+    cam_dev->common.close   = camera_device_close;
+    cam_dev->ops            = cam_ops;
+
+    *device = &cam_dev->common;
+    LOGI("Y210: camera_device_open OK camera=%p", gCamera.get());
+    return NO_ERROR;
 }
 
-status_t Y210CameraWrapper::sendCommand(int32_t command, int32_t arg1, int32_t arg2)
-{
-    if (!isUsable()) {
-        return INVALID_OPERATION;
-    }
-    LOGI("Y210WRAP: sendCommand command=%d arg1=%d arg2=%d", command, arg1, arg2);
+static hw_module_methods_t camera_module_methods = {
+    open: camera_device_open,
+};
 
-    // Blob slot 25: sendCommand (see vtable layout comment above).
-    // CM7 dispatches sendCommand() via slot 23 which maps to blob's setParameters().
-    typedef status_t (*BlobSendCommandFn)(void*, int32_t, int32_t, int32_t);
-    BlobSendCommandFn fn = reinterpret_cast<BlobSendCommandFn>(blobVptr(mLibInterface)[25]);
-    status_t rc = fn(mLibInterface.get(), command, arg1, arg2);
-    LOGI("Y210WRAP: sendCommand rc=%d", rc);
-    return rc;
-}
-
-void Y210CameraWrapper::release()
-{
-    if (!isUsable()) {
-        LOGW("Y210WRAP: release skip double-release wrapper=%p released=%d iface=%p",
-                this, mReleased, mLibInterface.get());
-        return;
-    }
-    LOGI("Y210WRAP: release enter wrapper=%p iface=%p preview=%d recording=%d",
-            this, mLibInterface.get(), mPreviewRunning, mRecordingRunning);
-
-    if (mPreviewRunning) {
-        stopPreview();
-    }
-
-    // Clear callbacks before releasing so the blob cannot fire into a dead object.
-    if (mLibInterface != NULL) {
-        mLibInterface->setCallbacks(NULL, NULL, NULL, NULL);
-    }
-    mNotifyCb = NULL;
-    mDataCb = NULL;
-    mDataCbTimestamp = NULL;
-    mCallbackUser = NULL;
-
-    // Blob slot 26: release (see vtable layout comment above).
-    // CM7 dispatches release() via slot 24 which maps to blob's getParameters(),
-    // corrupting its internal state and crashing mediaserver.
-    // Calling the correct slot allows the blob to free its internal resources,
-    // enabling a clean reopen on the next HAL_openCameraHardware() call.
-    if (mLibInterface != NULL) {
-        typedef void (*BlobReleaseFn)(void*);
-        BlobReleaseFn fn = reinterpret_cast<BlobReleaseFn>(blobVptr(mLibInterface)[26]);
-        LOGI("Y210WRAP: release calling blob slot 26");
-        fn(mLibInterface.get());
-        LOGI("Y210WRAP: release blob slot 26 returned");
-    }
-
-    mReleased = true;
-    mPreviewRunning = false;
-    mRecordingRunning = false;
-    mLibInterface.clear();
-    sSingleton.clear();
-    LOGI("Y210WRAP: release exit clean");
-}
-
-}; // namespace android
+camera_module_t HAL_MODULE_INFO_SYM = {
+    common: {
+        tag:            HARDWARE_MODULE_TAG,
+        version_major:  1,
+        version_minor:  0,
+        id:             CAMERA_HARDWARE_MODULE_ID,
+        name:           "Huawei Y210 Camera HAL (ICS)",
+        author:         "CM9 Y210 port",
+        methods:        &camera_module_methods,
+        dso:            NULL,
+        reserved:       {0},
+    },
+    get_number_of_cameras: get_number_of_cameras_impl,
+    get_camera_info:       CameraHAL_GetCamInfo,
+};

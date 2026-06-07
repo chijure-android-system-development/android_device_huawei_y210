@@ -1,3 +1,24 @@
+RIL / Baseband Notes (Y210 / MSM7x27A, CM9/ICS)
+
+## Estado CM9 (2026-06-03)
+
+| Función | Estado |
+|---|---|
+| rild / baseband | **OK** — baseband 109808, Claro Perú 71610, HSPA |
+| IMEI | **OK** |
+| Llamadas voz | **OK** |
+| SMS | **OK** |
+| Datos móviles (rmnet0) | **OK** — IP real validada |
+| qmuxd + qmiproxy | **OK** |
+
+**RIL class en CM9:** `com.cyanogenmod.internal.telephony.HuaweiQualcommRIL`
+(no `QualcommNoSimReadyRIL` de CM7). El crash `ClassNotFoundException` de
+arranque se resolvió añadiendo el jar correcto al classpath del boot.
+
+---
+
+## Historial CM7 (arquitectura aplica en CM9)
+
 RIL / Baseband Notes (Y210 / MSM7x27A, CM7)
 ==========================================
 

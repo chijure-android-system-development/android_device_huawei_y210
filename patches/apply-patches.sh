@@ -52,4 +52,5 @@ apply packages/apps/Settings          packages_apps_Settings.patch
 apply vendor/cyanogen                 vendor_cyanogen.patch
 copy_new vendor_cyanogen_y210.mk      vendor/cyanogen/products/cyanogen_y210.mk
 
+
 echo "=== Todos los patches aplicados ==="
