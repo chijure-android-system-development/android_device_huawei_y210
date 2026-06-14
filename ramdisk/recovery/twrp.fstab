@@ -36,7 +36,7 @@
 /system		yaffs2		system
 #/* < DTS2011102501289 guojing 20111026 begin */
 #/*< DTS2011040701949 weixinghai 20110407 begin*/    
-/HWUserData     yaffs2          userdata2               (null)
+/HWUserData     yaffs2          userdata2
 #/* DTS2011040701949 weixinghai 20110407 end>*/
 #/* DTS2011102501289 guojing 20111026 end> */
 #/*< DTS2012011100976 weizhonghui  20120113 begin */
