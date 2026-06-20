@@ -1,5 +1,7 @@
 # TWRP Device configuration for Huawei Ascend Y210
 
+![Huawei Ascend Y210](banner.jpg)
+
 ## Device specifications
 
 Basic    | Spec Sheet
