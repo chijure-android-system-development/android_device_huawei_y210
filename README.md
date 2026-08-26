@@ -41,6 +41,8 @@ leyendo código.
 | Bluetooth (JSR-82/rfcomm) | ✅ OK | `BluetoothSocket` ruteado por el path BlueZ real (`FeatureOption.MTK_BT_PROFILE_SPP=false`) — sockets RFCOMM (OPP/PBAP) ya no fallan |
 | Bluetooth (descubrimiento real) | ⚠️ Parcial | El chip Broadcom ahora recibe comandos HCI reales (antes: silencio total) tras redirigir a `init.bcm.bt.sh`, pero `brcm_patchram_plus` corta antes de terminar de subir el firmware — `hci0` no queda registrado, el escaneo no encuentra dispositivos todavía |
 | Gallery2 / Camera / CMFileManager / Browser | ✅ OK | Reagregados al build (excluidos originalmente por espacio); `system.img` en 170.5 MiB con ~15.5 MiB de margen |
+| Apollo / DSPManager / Terminal Emulator | ✅ OK | Reagregados al build (excluidos originalmente por espacio); `system.img` en ~171.7 MiB con ~14.3 MiB de margen. `Music` (stock) removido de `device_y210.mk` para no duplicar reproductor con Apollo — `LOCAL_OVERRIDES_PACKAGES` de Apollo no purga el `.apk` obsoleto de builds previos en este build system, hace falta `make installclean` o exclusión explícita. `CMWallpapers` queda excluido (assets ~12 MiB) |
+| Email / Voice Dialer | ✅ OK | Ya estaban en el build, solo `pm disable`'d por presión de RAM — reactivados con `pm enable` |
 | SIM / datos móviles | ❓ Sin confirmar | Pendiente probar con SIM física insertada |
 | Freeze ocasional del sistema | ⚠️ Sin resolver | Reproducido navegando a una carpeta con muchos archivos reales grandes vía CMFileManager — causa raíz no confirmada, a veces autorecupera (kernel panic + reboot), a veces requiere sacar batería |
 

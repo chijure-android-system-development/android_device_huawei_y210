@@ -147,7 +147,6 @@ PRODUCT_PACKAGES += \
     DeskClock \
     Email \
     Exchange \
-    Music \
     Camera \
     Bluetooth \
     VoiceDialer \
