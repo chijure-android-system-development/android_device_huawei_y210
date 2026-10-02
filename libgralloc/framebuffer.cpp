@@ -112,7 +112,12 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
                 0, 0, m->info.xres, m->info.yres, NULL);
 
         const size_t offset = hnd->base - m->framebuffer->base;
-        m->info.activate = FB_ACTIVATE_VBL;
+        /* Y210: el panel es MIPI DSI en modo comando (hx8357c). Con
+         * FB_ACTIVATE_VBL, msm_fb_pan_display() sincroniza ademas con vsync
+         * y eglSwapBuffers tardaba ~29.5 ms (2 periodos, ~33 fps). Con NOW
+         * baja a ~15.4 ms. El stock evita la espera con un hilo de posting
+         * asincrono (gralloc CAF) y queda en ~4.7 ms. */
+        m->info.activate = FB_ACTIVATE_NOW;
         m->info.yoffset = offset / m->finfo.line_length;
         if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
             LOGE("FBIOPUT_VSCREENINFO failed");
