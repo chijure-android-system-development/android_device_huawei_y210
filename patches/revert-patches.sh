@@ -43,7 +43,8 @@ revert_wt hardware/ril hardware_ril.patch
 # hardware/libhardware_legacy — working tree
 revert_wt hardware/libhardware_legacy hardware_libhardware_legacy.patch
 
-# hardware/msm7k — 3 commits Y210 (copybit fixes)
+# hardware/msm7k — ya no se parchea (gralloc/copybit viven en el device tree);
+# el reset limpia arboles que todavia tengan el viejo hardware_msm7k.patch.
 # Base: 5336b50 (msm7k: copybit: fix YUV blit order)
 revert_commits hardware/msm7k 5336b50
 

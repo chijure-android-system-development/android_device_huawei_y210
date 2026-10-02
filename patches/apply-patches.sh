@@ -43,9 +43,6 @@ apply hardware/ril                    hardware_ril.patch
 # hardware/libhardware_legacy — wifi.c: soporte ath6k/AR6003 completo
 apply hardware/libhardware_legacy     hardware_libhardware_legacy.patch
 
-# hardware/msm7k — copybit: libcutils, stdlib.h, disable MDP blit para status bar
-apply hardware/msm7k                  hardware_msm7k.patch
-
 # system/netd — SoftAP ATH: declarar RSN pairwise para WPA2/CCMP
 apply system/netd                     system_netd.patch
 

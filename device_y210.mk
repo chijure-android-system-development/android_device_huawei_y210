@@ -17,10 +17,11 @@ PRODUCT_PACKAGES += \
     libmm-omxcore \
     libOmxCore
 
-# Graphics
+# Graphics: gralloc/copybit propios en libgralloc/ y libcopybit/ (antes se
+# parcheaba hardware/msm7k). hw_get_module carga *.y210 antes que *.msm7k.
 PRODUCT_PACKAGES += \
-    gralloc.msm7k \
-    copybit.msm7k
+    gralloc.y210 \
+    copybit.y210
 
 # Audio
 PRODUCT_PACKAGES += \
