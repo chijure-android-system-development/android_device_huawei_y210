@@ -178,9 +178,19 @@ on boot
     # Ensure Huawei RPC service is up early
     start oem_rpc_svc
 
-on post-fs-data
+# "post-fs-data" no existe en el init de GB (llega en ICS): esta seccion se
+# llamaba asi y nunca corria. post-fs corre justo despues de montar /data.
+on post-fs
     # QMI daemons (qmuxd/qmiproxy) expect this directory for their local sockets.
     mkdir /data/radio 0770 radio radio
+    # OMA DRM v1 (libdrm1): abre /data/drm/rights/* directamente sin crear el
+    # directorio. Mismos permisos que el init.rc stock.
+    mkdir /data/drm 0755 system sdcard_rw
+    chown system sdcard_rw /data/drm
+    chmod 0755 /data/drm
+    mkdir /data/drm/rights 0775 system sdcard_rw
+    chown system sdcard_rw /data/drm/rights
+    chmod 0775 /data/drm/rights
 
 on property:sys.boot_completed=1
     # Fix oncrpc node ownership/permissions after system is fully up
@@ -333,8 +343,8 @@ on property:ro.baseband="msm"
     # Huawei RPC service needed by RIL stack on this device
     start oem_rpc_svc
     # QMI daemons (qmuxd/qmiproxy) require /data/radio for their local sockets.
-    # Keep this here as well (in addition to post-fs-data) in case the trigger
-    # doesn't run or /data is wiped before this property fires.
+    # Keep this here as well (in addition to post-fs) in case /data is wiped
+    # before this property fires.
     mkdir /data/radio 0770 radio radio
     # QMI stack helpers needed by Qualcomm RIL (UIM/CAT/data).
     start qmuxd
