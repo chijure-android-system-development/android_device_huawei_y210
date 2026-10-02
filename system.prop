@@ -161,6 +161,10 @@ ro.config.alarm_alert=Alarm_Classic.ogg
 #DTS2011032102567 hanmincheng 20110411 begin 
 #delete ro.kernel.android.checkjni=1 to disable jni check 
 #DTS2011032102567 hanmincheng 20110411 end 
+# Y210 CM7: el build eng/userdebug inyecta ro.kernel.android.checkjni=1
+# (build/core/main.mk); AndroidRuntime consulta primero esta prop, asi que
+# la desactivamos como el stock (medido: -5..10% en arranque en frio).
+dalvik.vm.checkjni=false
 ro.setupwizard.mode=OPTIONAL
 net.bt.name=Android
 dalvik.vm.stack-trace-file=/data/anr/traces.txt
