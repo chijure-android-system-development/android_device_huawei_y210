@@ -1,3 +1,6 @@
+# REFERENCIA, NO SE CARGA: este archivo no va al ramdisk (ver docs/INIT_NOTES.md).
+# El init de GB nunca lo leia; lo que el stock aplicaba se migro a init.huawei.rc.
+
 # /*< DTS2011062406362 zhangyancun 2010110629 begin */
 # Just 256M memory use /init.mem.rc is here
 # Define the oom_adj values for the classes of processes that can be

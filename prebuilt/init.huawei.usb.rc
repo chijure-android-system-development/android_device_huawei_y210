@@ -1,3 +1,6 @@
+# REFERENCIA, NO SE CARGA: este archivo no va al ramdisk (ver docs/INIT_NOTES.md).
+# El init de GB nunca lo leia; lo que el stock aplicaba se migro a init.huawei.rc.
+
 on init
 #    write /sys/module/g_android/parameters $ro.serialno
 

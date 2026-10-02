@@ -25,8 +25,11 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-import /init.y210.rc
-import /init.mem.rc
+# Antes habia aqui "import /init.y210.rc" e "import /init.mem.rc": en el init
+# de GB import es un COMANDO (do_import), y fuera de una seccion "on" el
+# parser lo descarta, asi que esos archivos nunca se cargaron. Lo que el stock
+# si aplicaba se migro a este archivo (early-boot, post-fs); el resto se
+# descarto. Ver docs/INIT_NOTES.md.
 
 on boot-pause
     exec system/bin/battery_charging
@@ -492,7 +495,6 @@ on property:init.svc.bootanim=stopped
 service atfwd /system/bin/ATFWD-daemon
     user system
     group system radio
-    onrestart /system/bin/log -t RIL-ATFWD -p w "ATFWD daemon restarted"
 
 service hdmid /system/bin/hdmid
     socket hdmid stream 0660 root system graphics
@@ -551,12 +553,6 @@ on property:persist.timed.enable=true
     start time_daemon
 
 service ftp /system/bin/sdptool add --psm=5257 --channel=20 FTP
-    user bluetooth
-    group bluetooth net_bt_admin
-    disabled
-    oneshot
-
-service map /system/bin/sdptool add --channel=16 MAS
     user bluetooth
     group bluetooth net_bt_admin
     disabled

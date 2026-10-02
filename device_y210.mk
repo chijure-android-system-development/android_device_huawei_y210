@@ -65,15 +65,15 @@ PRODUCT_COPY_FILES += \
     frameworks/base/data/etc/android.hardware.wifi.xml:system/etc/permissions/android.hardware.wifi.xml \
     frameworks/base/data/etc/android.hardware.touchscreen.multitouch.distinct.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.distinct.xml
 
+# init.y210.rc / init.mem.rc / init.huawei.usb.rc ya no van al ramdisk: el
+# init de GB nunca los cargaba (import fuera de seccion, sin init.<hw>.rc).
+# Quedan en prebuilt/ solo como referencia. Ver docs/INIT_NOTES.md.
 PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/init.huawei.rc:root/init.huawei.rc \
     device/huawei/y210/prebuilt/init.target.rc:root/init.target.rc \
-    device/huawei/y210/prebuilt/init.y210.rc:root/init.y210.rc \
-    device/huawei/y210/prebuilt/init.mem.rc:root/init.mem.rc \
     device/huawei/y210/prebuilt/ueventd.huawei.rc:root/ueventd.huawei.rc \
     device/huawei/y210/prebuilt/ueventd.huawei.rc:root/ueventd.msm7x27a.rc \
     device/huawei/y210/prebuilt/init.qcom.sh:root/init.qcom.sh \
-    device/huawei/y210/prebuilt/init.huawei.usb.rc:root/init.huawei.usb.rc \
     device/huawei/y210/prebuilt/system/etc/init.qcom.bt.sh:system/etc/init.qcom.bt.sh \
     device/huawei/y210/prebuilt/system/etc/init.qcom.fm.sh:system/etc/init.qcom.fm.sh \
     device/huawei/y210/prebuilt/system/etc/init.qcom.post_boot.sh:system/etc/init.qcom.post_boot.sh \

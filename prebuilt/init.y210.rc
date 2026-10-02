@@ -1,3 +1,6 @@
+# REFERENCIA, NO SE CARGA: este archivo no va al ramdisk (ver docs/INIT_NOTES.md).
+# El init de GB nunca lo leia; lo que el stock aplicaba se migro a init.huawei.rc.
+
 # < DTS2010081203613 huangkai zhangli 20100812 begin
 # /* <DTS2011042004173 shifengbing 20110420 begin */
 # /* < DTS2011042605275 shifengbing base on DTS2011041300750 20110520 begin */
