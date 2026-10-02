@@ -105,6 +105,13 @@ apply frameworks/base                 frameworks_base_titlebar_ninepatch.patch
 #                   que AOSP ICS. Sesión 2026-10-02.
 apply frameworks/base                 frameworks_base_thumbnailutils_fd.patch
 
+# frameworks/base — StagefrightMediaScanner: ".m4v" no estaba en la lista de
+#                   extensiones aceptadas → los videos de la cámara (VideoCamera
+#                   guarda MPEG_4 como .m4v) quedaban con duration=0 y sin
+#                   metadata en la DB de medios. MPEG4Extractor detecta el
+#                   contenedor por sniff, no por extensión. Sesión 2026-10-02.
+apply frameworks/base                 frameworks_base_scanner_m4v.patch
+
 # packages/apps/Camera — adaptaciones Y210 al lifecycle de cámara
 apply packages/apps/Camera            packages_apps_Camera.patch
 

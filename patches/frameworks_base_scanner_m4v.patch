@@ -1,0 +1,13 @@
+diff --git a/media/libstagefright/StagefrightMediaScanner.cpp b/media/libstagefright/StagefrightMediaScanner.cpp
+index 36590195846..838a4ff8dd8 100644
+--- a/media/libstagefright/StagefrightMediaScanner.cpp
++++ b/media/libstagefright/StagefrightMediaScanner.cpp
+@@ -42,7 +42,7 @@ static bool FileHasAcceptableExtension(const char *extension) {
+         ".mp3", ".mp4", ".m4a", ".3gp", ".3gpp", ".3g2", ".3gpp2",
+         ".mpeg", ".ogg", ".mid", ".smf", ".imy", ".wma", ".aac",
+         ".wav", ".amr", ".midi", ".xmf", ".rtttl", ".rtx", ".ota",
+-        ".mkv", ".mka", ".webm", ".ts", ".flac"
++        ".mkv", ".mka", ".webm", ".ts", ".flac", ".m4v"
+ #if defined(OMAP_ENHANCEMENT)
+         ,".wmv", ".asf"
+ #endif
