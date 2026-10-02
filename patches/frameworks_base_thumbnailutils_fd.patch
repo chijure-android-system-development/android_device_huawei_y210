@@ -1,0 +1,31 @@
+diff --git a/media/java/android/media/ThumbnailUtils.java b/media/java/android/media/ThumbnailUtils.java
+index 291d8a304e6..c0e88578d32 100644
+--- a/media/java/android/media/ThumbnailUtils.java
++++ b/media/java/android/media/ThumbnailUtils.java
+@@ -107,8 +107,10 @@ public class ThumbnailUtils {
+         }
+ 
+         if (bitmap == null) {
++            FileInputStream stream = null;
+             try {
+-                FileDescriptor fd = new FileInputStream(filePath).getFD();
++                stream = new FileInputStream(filePath);
++                FileDescriptor fd = stream.getFD();
+                 BitmapFactory.Options options = new BitmapFactory.Options();
+                 options.inSampleSize = 1;
+                 options.inJustDecodeBounds = true;
+@@ -128,6 +130,14 @@ public class ThumbnailUtils {
+                 Log.e(TAG, "", ex);
+             } catch (OutOfMemoryError oom) {
+                 Log.e(TAG, "Unable to decode file " + filePath + ". OutOfMemoryError.", oom);
++            } finally {
++                try {
++                    if (stream != null) {
++                        stream.close();
++                    }
++                } catch (IOException ex) {
++                    Log.e(TAG, "", ex);
++                }
+             }
+         }
+ 

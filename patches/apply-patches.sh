@@ -96,6 +96,15 @@ apply frameworks/base                 frameworks_base_statusbar_expanded.patch
 #                   públicos. Sesión 2026-07-13.
 apply frameworks/base                 frameworks_base_titlebar_ninepatch.patch
 
+# frameworks/base — ThumbnailUtils.createImageThumbnail(): el FileInputStream
+#                   quedaba sin referencia; un GC entre el decode de bounds y
+#                   el decode real lo finalizaba y cerraba el fd → skia
+#                   "decoder->decode returned false" + "Can't create mini
+#                   thumbnail" en ~1 de cada 2 PNG (alternado en la DB de
+#                   medios). Además nunca se cerraba (leak de fd). Mismo fix
+#                   que AOSP ICS. Sesión 2026-10-02.
+apply frameworks/base                 frameworks_base_thumbnailutils_fd.patch
+
 # packages/apps/Camera — adaptaciones Y210 al lifecycle de cámara
 apply packages/apps/Camera            packages_apps_Camera.patch
 
