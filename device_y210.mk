@@ -35,6 +35,18 @@ PRODUCT_PACKAGES += \
     gps.y210 \
     fminit
 
+# Huawei factory/service-menu apps, rebuilt from source (deodexed against the
+# stock Huawei framework, then decompiled) instead of installed as the stock
+# odex prebuilts, since those depend on the original framework's exact
+# field/vtable offsets and don't run correctly against this build's framework.
+# PENDIENTE: la decompilacion aun no compila contra este framework
+# (MMITest_II: 18 errores -- artefactos "th = th2", APIs Huawei multi-SIM,
+# Settings.Systemex, R.java duplicado; ProjectMenuAct: 13 "cannot find
+# symbol"). Fuera del build hasta portarlas.
+#PRODUCT_PACKAGES += \
+#    ProjectMenuAct \
+#    MMITest_II
+
 ifeq ($(TARGET_PREBUILT_KERNEL),)
 	LOCAL_KERNEL := device/huawei/y210/kernel
 else
@@ -81,9 +93,8 @@ PRODUCT_COPY_FILES += \
 	    device/huawei/y210/prebuilt/system/bin/sleeplogcat:system/bin/sleeplogcat \
 	    device/huawei/y210/prebuilt/system/bin/kmsgcat:system/bin/kmsgcat \
 	    device/huawei/y210/prebuilt/system/bin/diag_mdlog:system/bin/diag_mdlog \
-	    device/huawei/y210/prebuilt/system/app/ProjectMenuAct.apk:system/app/ProjectMenuAct.apk \
-    device/huawei/y210/prebuilt/system/app/ProjectMenuAct.odex:system/app/ProjectMenuAct.odex \
     device/huawei/y210/prebuilt/system/lib/libprojectmenu.so:system/lib/libprojectmenu.so \
+    device/huawei/y210/prebuilt/system/lib/libmmitest.so:system/lib/libmmitest.so \
     device/huawei/y210/prebuilt/system/usr/keychars/7x27a_kp.kcm:system/usr/keychars/7x27a_kp.kcm \
     device/huawei/y210/prebuilt/system/usr/keychars/7x27a_kp.kcm:system/usr/keychars/default_keypad.kcm \
     device/huawei/y210/prebuilt/system/usr/keylayout/7x27a_kp.kl:system/usr/keylayout/7x27a_kp.kl \
