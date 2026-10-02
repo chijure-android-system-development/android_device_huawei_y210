@@ -31,6 +31,15 @@ import /init.mem.rc
 on boot-pause
     exec system/bin/battery_charging
 
+on early-boot
+    # Valores del init.rc stock del Y210. Estaban en init.y210.rc, que nunca
+    # se carga (el "import" de arriba esta fuera de toda seccion y el init de
+    # GB lo descarta). En early-boot y no en boot: el "on boot" de init.rc
+    # termina con class_start default, y zygote heredaria el limite viejo.
+    setrlimit 7 2048 2048
+    write /proc/sys/net/core/rmem_max  1220608
+    write /proc/sys/net/core/wmem_max  1220608
+
 on boot
     # Allow copybit/EGL userspace (including app processes via libagl/EGL) to
     # access the framebuffer and KGSL nodes. Without this, copybit.msm7k fails
