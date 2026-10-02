@@ -2,26 +2,45 @@
 
 ## Hardware
 
-- Display: 320×480 px, 32 bpp (RGBA_8888)
-- GPU: Adreno 200 (MSM7225A)
-- Framebuffer: double-buffered, 320×960 virtual (`yres_virtual`), page-flip via `FBIOPUT_VSCREENINFO` + `yoffset`
-- Stride: 1280 bytes/row (320 px × 4 bytes)
-- Framebuffer driver: `msmfb30_90000`
+- Display: 320×480 px, 32 bpp (RGBA_8888, `r=24:8 g=16:8 b=8:8`)
+- Panel: **MIPI DSI en modo comando** (`hx8357c`, `panel_info.type = 9`, `fb_num = 3`)
+- GPU: Adreno 200 (MSM7225A), `gpuclk` 133 MHz (= `max_gpuclk`)
+- Framebuffer: `msmfb30_90000`, `yres_virtual = 1440` (3 buffers de 480 líneas), stride 1280 bytes
 
-## Stack
+## Stack (verificado 2026-10-02)
 
 ```
-SurfaceFlinger
-  └─ libagl (PixelFlinger — SW GL compositor)
-       └─ copybit.y210.so (MDP3 HW blit — used by libagl for texture draws)
-  └─ gralloc.y210.so (framebuffer HAL)
-       └─ /dev/graphics/fb0
-            └─ MSMFB_BLIT ioctl (MDP DMA engine, also via /dev/fb0)
+SurfaceFlinger (system_server)
+  └─ EGL/GLES Adreno 200 (HW: "renderer: Adreno (TM) 200", /dev/kgsl-3d0)
+  └─ gralloc.y210.so   (device/huawei/y210/libgralloc, ex libgralloc-qsd8k)
+       └─ /dev/graphics/fb0 — page-flip por yoffset (alterna 0/480)
+  └─ copybit.y210.so   (device/huawei/y210/libcopybit) — solo se carga con
+       capas push-buffer (video/cámara) vía LayerBuffer
 ```
 
-SurfaceFlinger uses **software GL** (`SLOW_CONFIG` flag set). Copybit is used by libagl
-to accelerate individual texture blits (e.g., app surfaces drawn to the FB), not for
-the SF compositor pass itself.
+La nota anterior de que SurfaceFlinger componía por software (`SLOW_CONFIG`) **ya no es cierta**: compone la Adreno 200. gralloc y copybit viven en el device tree como `*.y210` (hw_get_module prueba `ro.product.board=y210` antes que `ro.board.platform=msm7k`); `hardware/msm7k` ya no se parchea.
+
+## Posting del framebuffer: FB_ACTIVATE_NOW (2026-10-02)
+
+`eglSwapBuffers` en reposo (medido igual en ambos: abrir Calculadora, HOME, esperar 3 s, `dumpsys SurfaceFlinger`):
+
+| | swap |
+|---|---|
+| CM7 con `FB_ACTIVATE_VBL` | ~29.5 ms (2 vsync, techo ~33 fps) |
+| **CM7 con `FB_ACTIVATE_NOW`** | **~15.4 ms** |
+| Stock | ~0.3–4.8 ms |
+
+`msm_fb_pan_display()` termina en `mdp_set_dma_pan_info(..., activate == FB_ACTIVATE_VBL)` + `mdp_dma_pan_update()`; con VBL además sincroniza con vsync, y en un panel en modo comando eso duplicaba la espera. El stock usa el gralloc CAF más nuevo, que tiene un **hilo de posting asíncrono** (`pthread_create`/`pthread_cond_*`, `framebufferStateName`, props `debug.gr.swapinterval`/`debug.gr.numframebuffers`): `fb_post` delega y vuelve al instante. Portar ese hilo es la siguiente mejora posible (toca lock/unlock del framebuffer).
+
+Descartado con medición: CPU/governor (con `performance` a 1 GHz sigue igual), reloj GPU (ya al máximo), composición por software, falta de page-flip.
+
+**`W/msm7k.gralloc: FBIOPUT_VSCREENINFO failed, page flipping not supported` es engañoso.** Lo produce solo el `FBIOPUT` inicial de `mapFrameBufferLocked`, que pide `transp.length = 0` y `msm_fb_check_var` exige `transp.length == 8` para 32 bpp. Después gralloc relee la configuración del kernel (`yres_virtual = 1440`), calcula `numBuffers = 3` y el flip por `yoffset` funciona (verificable con `cat /sys/class/graphics/fb0/pan` mientras hay animación; con la pantalla apagada no hay frames).
+
+## copybit: desfase de ABI que NO hay que "arreglar" (2026-10-02)
+
+`libcopybit` se compila con `hardware/msm7k/libgralloc/gralloc_priv.h` (gralloc msm7201A), pero los handles vienen del gralloc qsd8k. `private_handle_t` coincide en los 7 primeros campos (`fd`…`base`); el 8º es `map_offset` en el header de copybit y `lockState` en qsd8k, y el bit `0x4` es `PRIV_FLAGS_USES_GPU` en uno y `PRIV_FLAGS_USES_PMEM_ADSP` en el otro.
+
+Se probó compilar copybit contra el header correcto (`memory_id = hnd->fd` siempre): **la reproducción de video pasó a fallar en cada frame** (`copyBits failed (Invalid argument)`, src 352×288 → dst 288×320 rotado), mientras que con el copybit original da 0 fallos. Es decir, el camino "GPU" (`memory_id = gpu_fd`, offset extra, RGBA→BGRA) es el que hace funcionar el blit de video en este equipo. Se revirtió. No tocar sin entender qué deja el decoder en esos campos.
 
 ## Bug: Statusbar/lockscreen "ghosting" corruption — FIXED (2026-05-02)
 

@@ -179,5 +179,13 @@ Verlo con `adb shell ps -t | grep ' D '`. No investigar como causa de lentitud.
   (`melfas-touchscreen`, MT protocolo A) no produce scroll real; para medir
   FPS de scroll, el scroll lo hace una persona mientras corre el contador.
 
-**Pendiente:** medir FPS de scroll en listas largas (Ajustes → Administrar
-aplicaciones) para decidir si hay cuello de botella en composición/posting.
+**Resuelto (2026-10-02):** el cuello de botella estaba en el posting del
+framebuffer: `eglSwapBuffers` ~29.5 ms con `FB_ACTIVATE_VBL` → ~15.4 ms con
+`FB_ACTIVATE_NOW` (stock ~4.7 ms con hilo de posting asíncrono). Ver
+RENDER_NOTES.md.
+
+**Bug de robustez anotado (no gráfico):** reiniciar el framework con
+`stop`/`start` varias veces puede tirar `system_server`: `netd` conserva el
+PAN de Bluetooth de la instancia anterior, `pan start` devuelve EBUSY y
+`BluetoothNetworkService.onBluetoothEnable()` no captura la
+`IllegalStateException`. En un boot normal no ocurre.
