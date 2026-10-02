@@ -30,7 +30,22 @@ La nota anterior de que SurfaceFlinger componía por software (`SLOW_CONFIG`) **
 | **CM7 con `FB_ACTIVATE_NOW`** | **~15.4 ms** |
 | Stock | ~0.3–4.8 ms |
 
-`msm_fb_pan_display()` termina en `mdp_set_dma_pan_info(..., activate == FB_ACTIVATE_VBL)` + `mdp_dma_pan_update()`; con VBL además sincroniza con vsync, y en un panel en modo comando eso duplicaba la espera. El stock usa el gralloc CAF más nuevo, que tiene un **hilo de posting asíncrono** (`pthread_create`/`pthread_cond_*`, `framebufferStateName`, props `debug.gr.swapinterval`/`debug.gr.numframebuffers`): `fb_post` delega y vuelve al instante. Portar ese hilo es la siguiente mejora posible (toca lock/unlock del framebuffer).
+### Posting asíncrono (2026-10-02)
+
+`fb_post` ya no hace el pan: lo encola a un hilo propio de gralloc (`fb_post_thread`, prioridad URGENT_DISPLAY), igual que el gralloc CAF del stock. El pan del kernel (`mdp_dma2_update`) solo vuelve cuando terminaron la DMA y el motor DSI (`wait_for_completion(&mfd->dma->comp)` + `dsi_mdp_comp`). Así, cuando el pan del buffer A vuelve, A ya está en la GRAM del panel y SF puede volver a dibujarlo. `fb_post(B)` espera a que termine el pan anterior antes de soltar A (mismo orden `unlock`/`lock` que el camino síncrono), copia `m->info` (por `setUpdateRect`) y vuelve. Hay un solo pan en vuelo.
+
+| | `eglSwapBuffers` en reposo |
+|---|---|
+| `FB_ACTIVATE_VBL` (original) | ~29.5 ms |
+| `FB_ACTIVATE_NOW` síncrono | ~15.4 ms |
+| **`FB_ACTIVATE_NOW` + posting asíncrono** | **~0.3–13 ms** (~3 ms típico) |
+| Stock | ~0.3–4.8 ms |
+
+Se desactiva con `setprop debug.gr.async_post 0` (se lee al abrir fb0, hay que reiniciar el framework). Log al arrancar: `async framebuffer posting enabled (3 buffers)`.
+
+**Efecto secundario conocido, sin impacto visible:** con el posting asíncrono aparecen `E/copybit: copyBits failed (Invalid argument)` durante la reproducción de video (blit RGB565 352×288 → 288×320 rotado, `flags=00020008`). `0x20000` es `MDP_BLEND_FG_PREMULT`, y en MDP30 (`CONFIG_FB_MSM_MDP30=y`, no MDP31) `mdp_ppp_blit` lo rechaza siempre con `EINVAL`; en ese caso `LayerBuffer` vuelve a dibujar la capa por GL. Se ve más con el posting asíncrono porque SF compone más frames por segundo. Validado a ojo: el video se ve bien. Los `mpd_ppp: src img of zero size!` de dmesg son del mismo flujo.
+
+`msm_fb_pan_display()` termina en `mdp_set_dma_pan_info(..., activate == FB_ACTIVATE_VBL)` + `mdp_dma_pan_update()`; con VBL además sincroniza con vsync, y en un panel en modo comando eso duplicaba la espera. El stock usa el gralloc CAF más nuevo, que tiene un **hilo de posting asíncrono** (`pthread_create`/`pthread_cond_*`, `framebufferStateName`, props `debug.gr.swapinterval`/`debug.gr.numframebuffers`): `fb_post` delega y vuelve al instante. Ese hilo ya está portado: ver "Posting asíncrono" arriba.
 
 Descartado con medición: CPU/governor (con `performance` a 1 GHz sigue igual), reloj GPU (ya al máximo), composición por software, falta de page-flip.
 

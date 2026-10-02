@@ -27,9 +27,12 @@
 
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <cutils/log.h>
 #include <cutils/atomic.h>
@@ -89,6 +92,70 @@ static int fb_setUpdateRect(struct framebuffer_device_t* dev,
     return 0;
 }
 
+/*
+ * Y210: posting asincrono del framebuffer (como el gralloc CAF del stock).
+ *
+ * El panel es MIPI DSI en modo comando: FBIOPUT_VSCREENINFO no vuelve hasta
+ * que la DMA del MDP y el motor de comandos DSI terminaron de mandar el frame
+ * al panel (~15 ms, mdp_dma2_update en el kernel). Hacerlo en el hilo de
+ * SurfaceFlinger lo bloqueaba todo ese tiempo. Aqui fb_post solo encola el
+ * buffer y un hilo propio hace el pan, asi SF compone el siguiente frame
+ * mientras el panel recibe el actual.
+ *
+ * Seguridad: fb_post espera a que el pan anterior haya vuelto antes de
+ * soltar el buffer anterior (mismo orden unlock/lock que el camino
+ * sincrono). Como el pan solo vuelve con la DMA terminada, el buffer que SF
+ * vuelve a dibujar ya esta en la GRAM del panel. Hay un solo pan en vuelo.
+ *
+ * debug.gr.async_post=0 vuelve al posting sincrono (se lee al abrir fb0).
+ */
+struct fb_post_queue_t {
+    pthread_mutex_t lock;
+    pthread_cond_t cond_post;   /* hay un buffer encolado */
+    pthread_cond_t cond_idle;   /* el pan en curso termino */
+    int fd;
+    int pending;                /* 1 = encolado o en pan */
+    int quit;
+    int enabled;
+    pthread_t thread;
+    struct fb_var_screeninfo info;
+};
+
+static fb_post_queue_t sPost;   /* mutex/conds se inicializan al abrir fb0 */
+
+static void* fb_post_thread(void*)
+{
+    /* misma prioridad que el hilo de composicion de SF */
+    setpriority(PRIO_PROCESS, gettid(), -8 /* ANDROID_PRIORITY_URGENT_DISPLAY */);
+
+    pthread_mutex_lock(&sPost.lock);
+    for (;;) {
+        while (!sPost.pending && !sPost.quit)
+            pthread_cond_wait(&sPost.cond_post, &sPost.lock);
+        if (sPost.quit)
+            break;
+        struct fb_var_screeninfo info = sPost.info;
+        pthread_mutex_unlock(&sPost.lock);
+
+        if (ioctl(sPost.fd, FBIOPUT_VSCREENINFO, &info) == -1)
+            LOGE("FBIOPUT_VSCREENINFO failed (%s)", strerror(errno));
+
+        pthread_mutex_lock(&sPost.lock);
+        sPost.pending = 0;
+        pthread_cond_broadcast(&sPost.cond_idle);
+    }
+    pthread_mutex_unlock(&sPost.lock);
+    return NULL;
+}
+
+static void fb_post_wait_idle()
+{
+    pthread_mutex_lock(&sPost.lock);
+    while (sPost.pending)
+        pthread_cond_wait(&sPost.cond_idle, &sPost.lock);
+    pthread_mutex_unlock(&sPost.lock);
+}
+
 static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
 {
     if (private_handle_t::validate(buffer) < 0)
@@ -99,7 +166,11 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
     private_handle_t const* hnd = reinterpret_cast<private_handle_t const*>(buffer);
     private_module_t* m = reinterpret_cast<private_module_t*>(
             dev->common.module);
-    
+
+    /* el buffer anterior sigue en pan hasta que el hilo termine */
+    if (sPost.enabled)
+        fb_post_wait_idle();
+
     if (m->currentBuffer) {
         m->base.unlock(&m->base, m->currentBuffer);
         m->currentBuffer = 0;
@@ -119,7 +190,14 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
          * asincrono (gralloc CAF) y queda en ~4.7 ms. */
         m->info.activate = FB_ACTIVATE_NOW;
         m->info.yoffset = offset / m->finfo.line_length;
-        if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
+        if (sPost.enabled) {
+            /* copia de m->info: setUpdateRect la modifica desde SF */
+            pthread_mutex_lock(&sPost.lock);
+            sPost.info = m->info;
+            sPost.pending = 1;
+            pthread_cond_signal(&sPost.cond_post);
+            pthread_mutex_unlock(&sPost.lock);
+        } else if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
             LOGE("FBIOPUT_VSCREENINFO failed");
             m->base.unlock(&m->base, buffer); 
             return -errno;
@@ -364,6 +442,16 @@ static int mapFrameBuffer(struct private_module_t* module)
 static int fb_close(struct hw_device_t *dev)
 {
     fb_context_t* ctx = (fb_context_t*)dev;
+    if (sPost.enabled) {
+        fb_post_wait_idle();
+        pthread_mutex_lock(&sPost.lock);
+        sPost.quit = 1;
+        pthread_cond_signal(&sPost.cond_post);
+        pthread_mutex_unlock(&sPost.lock);
+        pthread_join(sPost.thread, NULL);
+        sPost.enabled = 0;
+        sPost.quit = 0;
+    }
     if (ctx) {
         free(ctx);
     }
@@ -413,6 +501,24 @@ int fb_device_open(hw_module_t const* module, const char* name,
                     m->finfo.reserved[1] == 0x5055) {
                 dev->device.setUpdateRect = fb_setUpdateRect;
                 LOGD("UPDATE_ON_DEMAND supported");
+            }
+
+            char value[PROPERTY_VALUE_MAX];
+            property_get("debug.gr.async_post", value, "1");
+            if (atoi(value) != 0 && m->numBuffers > 1 && !sPost.enabled) {
+                pthread_mutex_init(&sPost.lock, NULL);
+                pthread_cond_init(&sPost.cond_post, NULL);
+                pthread_cond_init(&sPost.cond_idle, NULL);
+                sPost.fd = m->framebuffer->fd;
+                sPost.pending = 0;
+                sPost.quit = 0;
+                if (pthread_create(&sPost.thread, NULL, fb_post_thread, NULL) == 0) {
+                    sPost.enabled = 1;
+                    LOGI("async framebuffer posting enabled (%d buffers)",
+                            m->numBuffers);
+                } else {
+                    LOGE("async framebuffer posting disabled: pthread_create failed");
+                }
             }
 
             *device = &dev->device.common;
