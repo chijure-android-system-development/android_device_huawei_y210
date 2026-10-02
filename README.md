@@ -57,6 +57,17 @@ breakfast y210
 brunch y210
 ```
 
+Con el contenedor Docker `cm7-builder` (`~/android-build-docker/cm7-docker`),
+usando el script con tiempos/log del árbol (su default es `c660`):
+
+```bash
+docker exec -it cm7-builder bash -c 'DEVICE=y210 ./timed_build.sh'
+```
+
+`mka bacon` compila todo `Android.mk` del árbol aunque no esté en
+`PRODUCT_PACKAGES`; por eso las apps de fábrica decompiladas (`ProjectMenuAct`,
+`MMITest_II`, todavía WIP) solo se incluyen con `Y210_FACTORY_APPS=true`.
+
 ## Smoke test
 
 ```bash

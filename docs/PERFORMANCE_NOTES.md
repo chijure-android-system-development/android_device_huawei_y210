@@ -135,3 +135,49 @@ completo confirmando los 3 valores tras boot normal (`interactive` con
 tunables correctos, `noop` en `mtdblock4`/`mtdblock6`, `dirty_ratio=10`), LMK
 intacto, sin `FATAL`/`ANR` en logcat, `system_server`/`systemui`/`launcher`
 corriendo con normalidad.
+
+## CheckJNI desactivado, como el stock (2026-10-02)
+
+El build `eng` (y también `userdebug`) inyecta `ro.kernel.android.checkjni=1`
+desde `build/core/main.mk` (rama `!user_variant`), así que cada proceso Dalvik
+arrancaba con `D/AndroidRuntime: CheckJNI is ON`: valida cada llamada JNI,
+incluidas las de dibujo (Canvas/Skia), en un core único a 1 GHz. El stock de
+Huawei lo quitaba a propósito (comentario `DTS2011032102567` en `system.prop`).
+
+Fix: `dalvik.vm.checkjni=false` en `system.prop`. `AndroidRuntime.cpp`
+consulta primero esa prop y solo si no es `true`/`false` cae a
+`ro.kernel.android.checkjni`. No hace falta tocar el build system.
+
+Medición (arranque en frío vía `am start -W`, `TotalTime`, promedio de 3;
+el proceso se mata con `kill` porque GB no tiene `am force-stop`):
+
+| App | CheckJNI ON | CheckJNI OFF |
+|---|---|---|
+| Galería (`com.cooliris.media`) | 754 ms | 682 ms |
+| Mensajes | 726 ms | 678 ms |
+| Navegador | 860 ms | 819 ms |
+| Calculadora | 690 ms | 686 ms |
+
+Validación: `adb logcat -d | grep 'CheckJNI is'` → `CheckJNI is OFF`.
+
+## Load average ~10 en reposo: cosmético, NO es carga real
+
+`/proc/loadavg` marca ~10 con la CPU 97% idle. Los procesos que suman son
+~10 kthreads RPC del kernel MSM en estado `D` (espera no interrumpible al
+ARM9): `krtcclntd`, `kbatteryclntd`, `khsclntd`, `kdev_dctclntd`,
+`koemrapiclientc`, `voicememo_rpc`, `audmgr_rpc`, etc. No consumen CPU.
+Verlo con `adb shell ps -t | grep ' D '`. No investigar como causa de lentitud.
+
+## Herramientas de medición
+
+- `procrank` no funciona con este kernel (pagemap incompatible, valores sin
+  sentido). Usar RSS de `ps` o `dumpsys meminfo`.
+- Contador de frames de SurfaceFlinger: `service call SurfaceFlinger 1013`
+  (devuelve el total de frames en hex). Muestreando cada segundo se obtiene
+  FPS durante un scroll.
+- La inyección de toques con `sendevent` sobre `/dev/input/event0`
+  (`melfas-touchscreen`, MT protocolo A) no produce scroll real; para medir
+  FPS de scroll, el scroll lo hace una persona mientras corre el contador.
+
+**Pendiente:** medir FPS de scroll en listas largas (Ajustes → Administrar
+aplicaciones) para decidir si hay cuello de botella en composición/posting.

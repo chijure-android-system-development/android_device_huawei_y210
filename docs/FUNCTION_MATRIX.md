@@ -14,6 +14,8 @@ No reemplaza los notes existentes; los referencia cuando aplica:
 - `device/huawei/y210/CAMERA_NOTES.md`
 - `device/huawei/y210/GPS_NOTES.md`
 - `device/huawei/y210/RENDER_NOTES.md`
+- `device/huawei/y210/MEDIA_NOTES.md`
+- `device/huawei/y210/PERFORMANCE_NOTES.md`
 - `device/huawei/y210/LOGGING_NOTES.md`
 
 ## Convención de estado
@@ -126,6 +128,12 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 - Preview video: **OK** (H.263 352×288, mismo pipeline NV21→RGB565)
 - Grabación video H.263 352×288 15fps: **OK** (MP4 guardado en galería)
 - Video HD (640×480): **N/A** (sin driver kernel `msm_vidc_enc`)
+
+### Galería / multimedia
+
+- Miniaturas PNG: **OK** (2026-10-02: ~1 de cada 2 fallaba por fd cerrado por GC en `ThumbnailUtils` — ver `docs/MEDIA_NOTES.md`)
+- Duración de videos `.m4v` de la cámara en la DB de medios: **OK** (2026-10-02: el scanner Stagefright no aceptaba `.m4v`)
+- Miniaturas de video H.263/MPEG-4/H.264 Baseline: **OK** | H.264 High: **N/A** (decoder HW solo Baseline)
 
 ### Almacenamiento / USB
 
