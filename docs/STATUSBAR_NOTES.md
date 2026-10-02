@@ -191,18 +191,29 @@ Si aparecen 2 fechas:
 
 ## Captura de pantalla (Gingerbread)
 
-En GB no hay `screencap`. Usar el binario `screenshot`:
+`/system/bin/screenshot` **funciona** (verificado 2026-10-02; la nota de que
+estaba roto era un malentendido). Es el helper nativo de CMScreenshot
+(`packages/apps/CMScreenshot/native/ss.cpp`): ignora los argumentos, captura
+por SurfaceFlinger (`ScreenshotClient`, por eso nunca abre `fb0`) y escribe
+siempre `$EXTERNAL_STORAGE/tmpshot.bmp` (32 bpp, colores correctos).
+
+Desde el PC, en un paso (baja el BMP y lo convierte a PNG):
 
 ```bash
-adb shell /system/bin/screenshot /mnt/sdcard/tmpshot.bmp
-adb pull /mnt/sdcard/tmpshot.bmp .
+bash device/huawei/y210/tools/screenshot.sh [salida.png] [-s SERIAL]
 ```
 
-En host, convertir a PNG (si tienes ImageMagick):
+A mano:
 
 ```bash
+adb shell /system/bin/screenshot
+adb pull /mnt/sdcard/tmpshot.bmp .
 convert tmpshot.bmp tmpshot.png
 ```
+
+El `screencap` de GB (`frameworks/base/cmds/screencap`) no se instala y no
+conviene: no tiene `-p` (PNG), solo escribe RAW por stdout, y el pipe de
+`adb shell` corrompe binarios.
 
 ## Nota sobre push de SystemUI.apk
 
