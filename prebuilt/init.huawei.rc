@@ -44,10 +44,9 @@ on early-boot
     write /proc/sys/net/core/wmem_max  1220608
 
 on boot
-    # Allow copybit/EGL userspace (including app processes via libagl/EGL) to
-    # access the framebuffer and KGSL nodes. Without this, copybit.msm7k fails
-    # to open fb0 with EACCES and HW EGL may fail to initialize.
-    chmod 0666 /dev/graphics/fb0
+    # KGSL tiene que ser accesible para las apps (libEGL abre la GPU desde el
+    # proceso de la app). fb0 NO: solo lo abre system_server (SurfaceFlinger,
+    # grupo graphics); queda con el 0660 root:graphics de ueventd, como stock.
     chmod 0666 /dev/kgsl-3d0
     chmod 0666 /dev/kgsl
 
@@ -132,12 +131,9 @@ on boot
     #/* DTS2011121504967 wanghao 20111215 end > */
     #/* DTS2011122402005 wanghao 20111224 end > */
 
-    # FM radio device nodes: keep world-accessible like stock/ueventd rules.
-    # Some boots still create them with restrictive perms; fix up here.
-    wait /dev/radio0
-    chmod 0666 /dev/radio0
-    wait /dev/msm_fm
-    chmod 0666 /dev/msm_fm
+    # Nodos FM: los permisos los pone ueventd.huawei.rc (radio0 0660 root,
+    # msm_fm 0660 system:audio). radio0 solo lo abre fminit (setuid root) y le
+    # pasa el fd a la app; msm_fm solo lo abre mediaserver (grupo audio).
 
     # KGSL permissions: allow EGL/GLES userspace to open Adreno.
     # If this is too restrictive, apps (e.g. Gallery/Cooliris) will fail

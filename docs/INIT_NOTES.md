@@ -72,3 +72,22 @@ adb shell ls / | grep rc
 adb shell "cat /proc/sys/net/core/rmem_max; grep 'open files' /proc/1/limits; ls -ld /data/drm/rights /data/radio"
 adb shell dmesg | grep -E 'init: .*(duplicate|invalid)'   # debe salir vacío
 ```
+
+## Permisos de nodos `0666` revisados (2026-10-02)
+
+La tabla efectiva se calcula con `ueventd.rc` + `ueventd.huawei.rc` (gana la última regla) más los `chmod` de `init.huawei.rc`. Comparada contra el `ueventd.rc` stock:
+
+| Nodo | Stock | Antes en CM7 | Ahora | Quién lo abre |
+|---|---|---|---|---|
+| `/dev/graphics/fb0` | 0660 root:graphics | 0666 (chmod en init.huawei.rc) | **0660 root:graphics** | Solo `system_server` (SurfaceFlinger, grupo `graphics` 1003). Ninguna app lo tiene abierto. |
+| `/dev/radio0` | 0644 fm_radio | 0666 root (ueventd + chmod) | **0660 root:root** | Solo `fminit`, que es setuid root (`android_filesystem_config.h`) y pasa el fd a la app por `SCM_RIGHTS`. Ademas: un `open()` de radio0 reinicia el chip y borra el firmware, asi que con 0666 cualquier app podia cortar el FM. |
+| `/dev/msm_fm` | 0660 system:audio | 0666 root (ueventd + chmod) | **0660 system:audio** | Solo `mediaserver` (`AUDIO_START`/`AUDIO_STOP`, grupo `audio` 1005). |
+| `kgsl*`, `msm_hw3dc`, `genlock` | 0666 | 0666 | sin cambios | Las apps abren la GPU desde libEGL. |
+| `msm_voicememo` | 0666 system:audio | igual | sin cambios | Igual que stock. |
+| `/dev/diag` | 0666 radio:radio | igual | **sin cambios (igual que stock)** | Pendiente de decisión: abierto al mundo permite a cualquier app hablar con el modem por diag. Candidato a 0660 radio:radio (default AOSP). |
+
+Validado en equipo, con boot limpio (sin `chmod` en vivo): FM con audio, Galería (GL)/Navegador/Calculadora en frío sin `EACCES`, `run_fm_audmgr_session: AUDIO_START succeeded`.
+
+`W/msm7k.gralloc: FBIOPUT_VSCREENINFO failed, page flipping not supported` es **previo** a este cambio (aparece igual con fb0 en 0666). Ver PERFORMANCE_NOTES / RENDER_NOTES.
+
+**Cómo probar el FM sin reiniciar:** `FMRadioService` solo lanza `fminit` si `hw.fm.init != 1`, y `fminit` lo pone en 1. Si se mata `fminit`, la app no lo relanza y queda en `Tune -1` hasta reiniciar (bug latente). Para una prueba limpia: matar la app y `fminit`, `setprop hw.fm.init 0`, y recién ahí abrir la app. No lanzar `fminit` desde `adb shell`, porque muere con el SIGHUP al cerrar la sesión.
