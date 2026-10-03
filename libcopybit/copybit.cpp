@@ -233,14 +233,17 @@ static void set_infos(struct copybit_context_t *dev, struct mdp_blit_req *req) {
     req->alpha = dev->mAlpha;
     req->transp_mask = MDP_TRANSP_NOP;
     req->flags = dev->mFlags;
-    // MSM7K MDP rejects MDP_BLEND_FG_PREMULT and MDP_DITHER for YUV sources
-    // (EINVAL from MSMFB_BLIT). Strip both; only add premultiplied blending
-    // for RGB(A). Caller must set req->src.format (via set_image) before this.
+    /*
+     * Y210 is MDP30. mdp_ppp_blit returns EINVAL whenever
+     * MDP_BLEND_FG_PREMULT is set (that op exists only on MDP31).
+     * Video frames are RGB565, so the flag does not change pixels;
+     * leaving it set fails every blit and LayerBuffer falls back to GL.
+     * YUV still must not carry MDP_DITHER.
+     */
+    req->flags &= ~(uint32_t)MDP_BLEND_FG_PREMULT;
     if (req->src.format == MDP_Y_CBCR_H2V2 || req->src.format == MDP_Y_CRCB_H2V2 ||
             req->src.format == MDP_Y_CBCR_H2V1 || req->src.format == MDP_Y_CRCB_H2V1) {
-        req->flags &= ~(uint32_t)(MDP_DITHER);
-    } else {
-        req->flags |= MDP_BLEND_FG_PREMULT;
+        req->flags &= ~(uint32_t)MDP_DITHER;
     }
 }
 
