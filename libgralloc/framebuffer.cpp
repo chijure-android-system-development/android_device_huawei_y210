@@ -256,16 +256,58 @@ int mapFrameBufferLocked(struct private_module_t* module)
             0 };
 
     int fd = -1;
-    int i=0;
+    int saved_errno = ENOENT;
+    int attempt;
     char name[64];
 
-    while ((fd==-1) && device_template[i]) {
-        snprintf(name, 64, device_template[i], 0);
+    /*
+     * El kernel stock rechaza open() con EPERM si el panel sigue en
+     * early_suspend: msm_fb_open() llama blank UNBLANK y op_enable es
+     * false ("can't turn on display"). En stop/start con la pantalla
+     * apagada, SurfaceFlinger abre el fb antes de que PowerManager
+     * pida el resume. Sin el write a /sys/power/state, fbDev queda
+     * NULL y system_server muere en DisplayHardware::init (fps, 0x5c).
+     *
+     * /dev/fb0 no existe aqui. Si fb0 grafico falla con otro errno y se
+     * prueba igual, el ENOENT del fallback tapa el EPERM real.
+     */
+    for (attempt = 0; attempt < 30 && fd < 0; attempt++) {
+        snprintf(name, 64, device_template[0], 0);
         fd = open(name, O_RDWR, 0);
-        i++;
+        if (fd < 0 && errno == ENOENT) {
+            snprintf(name, 64, device_template[1], 0);
+            fd = open(name, O_RDWR, 0);
+        }
+        if (fd >= 0)
+            break;
+        saved_errno = errno;
+        if (saved_errno != EPERM)
+            break;
+        if (attempt == 0) {
+            /*
+             * PowerManager aun no pidio el resume (pasa en stop/start
+             * con la pantalla apagada). El mismo write que
+             * set_screen_state(1): "on" -> request_suspend_state(ON)
+             * -> late_resume, y msm_fb_open vuelve a aceptar el fd.
+             * system_server es group system; /sys/power/state es 0660.
+             */
+            int pfd = open("/sys/power/state", O_WRONLY);
+            if (pfd >= 0) {
+                if (write(pfd, "on", 2) == 2)
+                    LOGW("fb0 open EPERM (panel suspended), requested resume");
+                else
+                    LOGW("fb0 open EPERM, write state=on failed (%s)",
+                            strerror(errno));
+                close(pfd);
+            } else {
+                LOGW("fb0 open EPERM, cannot open /sys/power/state (%s)",
+                        strerror(errno));
+            }
+        }
+        usleep(100 * 1000);
     }
     if (fd < 0)
-        return -errno;
+        return -saved_errno;
 
     struct fb_fix_screeninfo finfo;
     if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == -1)
