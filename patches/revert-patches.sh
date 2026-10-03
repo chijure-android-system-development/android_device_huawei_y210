@@ -73,6 +73,7 @@ revert_wt packages/apps/Contacts packages_apps_Contacts.patch
 
 # packages/apps/FM — working tree
 revert_wt packages/apps/FM packages_apps_FM.patch
+revert_wt hardware/qcom/gps hardware_qcom_gps.patch
 
 # packages/apps/Settings — working tree
 revert_wt packages/apps/Settings packages_apps_Settings.patch

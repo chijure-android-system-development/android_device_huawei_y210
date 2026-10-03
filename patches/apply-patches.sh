@@ -127,6 +127,10 @@ apply packages/apps/Contacts          packages_apps_Contacts.patch
 # packages/apps/FM — app FM radio: config, FMRadio, FMRadioService, FmSharedPreferences
 apply packages/apps/FM                packages_apps_FM.patch
 
+# hardware/qcom/gps — NMEA AMSS 50000: el XDR escribe 1200 bytes y el
+#                     struct tenía 200, así que cada reporte pisaba el evento.
+apply hardware/qcom/gps               hardware_qcom_gps.patch
+
 # packages/apps/Settings — APN editor / APN settings para Claro Perú
 apply packages/apps/Settings          packages_apps_Settings.patch
 

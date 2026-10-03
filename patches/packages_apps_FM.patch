@@ -123,7 +123,7 @@ index f5ffb0a..aeb09ed 100644
  
      private void disableRadio() {
 diff --git a/src/com/android/fm/radio/FMRadioService.java b/src/com/android/fm/radio/FMRadioService.java
-index b849063..c98d011 100644
+index b849063..b1a3fb6 100644
 --- a/src/com/android/fm/radio/FMRadioService.java
 +++ b/src/com/android/fm/radio/FMRadioService.java
 @@ -30,6 +30,7 @@ import android.util.Log;
@@ -134,7 +134,7 @@ index b849063..c98d011 100644
  import java.lang.ref.WeakReference;
  
  /**
-@@ -218,6 +219,25 @@ public class FMRadioService extends Service {
+@@ -218,6 +219,26 @@ public class FMRadioService extends Service {
          mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, this.getClass().getName());
          mWakeLock.setReferenceCounted(false);
  
@@ -145,22 +145,23 @@ index b849063..c98d011 100644
 +        // exits on its own, so don't waitFor() it: the JNI side
 +        // (acquireFdFromFminit()) already retries connecting to fminit's
 +        // socket on its own for a few seconds, independent of this thread.
-+        if (!"1".equals(SystemProperties.get("hw.fm.init", "0"))) {
-+            new Thread("fminit-preload") {
-+                @Override public void run() {
-+                    try {
-+                        Runtime.getRuntime().exec("/system/bin/fminit");
-+                    } catch (IOException e) {
-+                        Log.w(LOGTAG, "fminit exec failed: " + e.getMessage());
-+                    }
++        // Always exec. If a daemon already holds the socket, the new process
++        // exits at bind. hw.fm.init stays "1" after kill -9, and skipping
++        // the exec in that case left the app at Tune -1 until reboot.
++        new Thread("fminit-preload") {
++            @Override public void run() {
++                try {
++                    Runtime.getRuntime().exec("/system/bin/fminit");
++                } catch (IOException e) {
++                    Log.w(LOGTAG, "fminit exec failed: " + e.getMessage());
 +                }
-+            }.start();
-+        }
++            }
++        }.start();
 +
          // Register for Screen On/off broadcast notifications
          registerScreenOnOffListener();
  
-@@ -521,8 +541,11 @@ public class FMRadioService extends Service {
+@@ -521,8 +542,11 @@ public class FMRadioService extends Service {
              fm_intent.putExtra("state", 1);
              context.sendBroadcast(fm_intent);
          }
@@ -172,7 +173,7 @@ index b849063..c98d011 100644
      }
  
      private void stopFM(){
-@@ -807,7 +830,7 @@ public class FMRadioService extends Service {
+@@ -807,7 +831,7 @@ public class FMRadioService extends Service {
          Log.d(LOGTAG, "fmOn");
  
          if (mReceiver == null) {
@@ -181,7 +182,7 @@ index b849063..c98d011 100644
              if (mReceiver == null) {
                  throw new RuntimeException("FmReceiver service not available!");
              }
-@@ -836,25 +859,28 @@ public class FMRadioService extends Service {
+@@ -836,25 +860,28 @@ public class FMRadioService extends Service {
              }
  
              if (bStatus == true) {
@@ -228,7 +229,7 @@ index b849063..c98d011 100644
                  bStatus = true;
              } else {
                  stop();
-@@ -1424,6 +1450,22 @@ public class FMRadioService extends Service {
+@@ -1424,6 +1451,22 @@ public class FMRadioService extends Service {
              } catch (RemoteException e) {
                  e.printStackTrace();
              }

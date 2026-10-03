@@ -1,0 +1,40 @@
+diff --git a/loc_api/libloc_api-rpc/inc-50000/loc_api_common.h b/loc_api/libloc_api-rpc/inc-50000/loc_api_common.h
+index cac604e..b5cde53 100755
+--- a/loc_api/libloc_api-rpc/inc-50000/loc_api_common.h
++++ b/loc_api/libloc_api-rpc/inc-50000/loc_api_common.h
+@@ -166,7 +166,9 @@ typedef struct rpc_loc_gnss_info_s_type rpc_loc_gnss_info_s_type;
+ 
+ struct rpc_loc_nmea_report_s_type {
+ 	rpc_uint16 length;
+-	char nmea_sentences[200];
++	/* xdr_rpc_loc_nmea_report_s_type writes 1200 bytes (gen-50000).
++	 * A 200-byte array overflowed the event on every NMEA report. */
++	char nmea_sentences[1200];
+ };
+ typedef struct rpc_loc_nmea_report_s_type rpc_loc_nmea_report_s_type;
+ 
+diff --git a/loc_api/libloc_api/loc_eng.cpp b/loc_api/libloc_api/loc_eng.cpp
+index a9d2574..d3f4bee 100755
+--- a/loc_api/libloc_api/loc_eng.cpp
++++ b/loc_api/libloc_api/loc_eng.cpp
+@@ -1322,10 +1322,16 @@ static void loc_eng_report_nmea(const rpc_loc_nmea_report_s_type *nmea_report_pt
+       loc_eng_data.nmea_cb(now, nmea_report_ptr->nmea_sentences.nmea_sentences_val,
+             nmea_report_ptr->nmea_sentences.nmea_sentences_len);
+ #else
+-      loc_eng_data.nmea_cb(now, nmea_report_ptr->nmea_sentences, nmea_report_ptr->length);
+-      LOC_LOGD("loc_eng_report_nmea: $%c%c%c\n",
+-         nmea_report_ptr->nmea_sentences[3], nmea_report_ptr->nmea_sentences[4],
+-               nmea_report_ptr->nmea_sentences[5]);
++      /* length from the modem is not the sentence size on this AMSS:
++       * the log showed a lone '$' while the opaque buffer holds the
++       * text. Report up to the first NUL, capped at the array. */
++      unsigned int nmea_len = strnlen(nmea_report_ptr->nmea_sentences,
++            sizeof(nmea_report_ptr->nmea_sentences));
++      if (nmea_len > 0) {
++         loc_eng_data.nmea_cb(now, nmea_report_ptr->nmea_sentences, nmea_len);
++         LOC_LOGD("loc_eng_report_nmea: %.*s\n", (int)nmea_len,
++               nmea_report_ptr->nmea_sentences);
++      }
+ 
+ #endif /* #if (AMSS_VERSION==3200||AMSS_VERSION==20000) */
+    }
