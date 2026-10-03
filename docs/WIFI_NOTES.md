@@ -234,14 +234,10 @@ Validación:
 3. Reiniciar el teléfono.
 4. Verificar que el bloque `network={...}` sigue presente después del boot.
 
-## Limitación observada al flashear fixes
+## Fastboot al flashear
 
-Durante la validación de este bug apareció una limitación del device:
-
-- `adb reboot bootloader` no entra a fastboot de forma confiable;
-- en varias pruebas el comando solo reinició Android normal;
-- el flujo de trabajo más estable fue entrar manualmente a fastboot antes de usar `fastboot flash`.
-
-Implicación práctica:
-- no asumir que `adb reboot bootloader` deja el equipo listo para `fastboot flash`;
-- siempre comprobar con `fastboot devices` antes de flashear.
+`adb reboot bootloader` no entra a fastboot. No es un bug del port: el
+2026-10-02 el mismo comando en el Y210 stock (`78F5FD28C4C4`,
+`Y210-0151V100R001C40B851`) solo reinició Android y `fastboot devices` no
+mostró el equipo. Es el bootloader de Huawei. Entrar a fastboot a mano y
+comprobar con `fastboot devices` antes de `fastboot flash`.
