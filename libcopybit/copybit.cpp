@@ -126,10 +126,10 @@ static int get_format(int format) {
     case COPYBIT_FORMAT_RGB_888:       return MDP_RGB_888;
     case COPYBIT_FORMAT_RGBA_8888:     return MDP_RGBA_8888;
     case COPYBIT_FORMAT_BGRA_8888:     return MDP_BGRA_8888;
-    // COPYBIT_FORMAT_YCrCb_420_SP corresponds to NV21 (Y + VU / CrCb).
-    // Map to the matching MDP format; using MDP_Y_CBCR_H2V2 (NV12) can lead
-    // to invalid blits or broken preview on some MSM7x27A devices.
-    case COPYBIT_FORMAT_YCrCb_420_SP:  return MDP_Y_CRCB_H2V2;
+    // The HAL calls this NV21, but on the Y210 MDP_Y_CRCB_H2V2 swaps
+    // chroma in the preview (blue shows as yellow). MDP_Y_CBCR_H2V2
+    // matches the buffer. JPEG and the video encoder do not use this path.
+    case COPYBIT_FORMAT_YCrCb_420_SP:  return MDP_Y_CBCR_H2V2;
     case COPYBIT_FORMAT_YCbCr_422_SP:  return MDP_Y_CRCB_H2V1;
     }
     return -1;
@@ -247,11 +247,68 @@ static void set_infos(struct copybit_context_t *dev, struct mdp_blit_req *req) {
     }
 }
 
-/** copy the bits */
-static int msm_copybit(struct copybit_context_t *dev, void const *list) 
+/*
+ * El header de userspace (bionic) define mdp_img sin el campo priv.
+ * El kernel del Y210 lo tiene, más sharpening_strength al final del
+ * pedido. Sin esos 4+4+4 bytes el kernel lee src_rect.w/h en cero
+ * ("src img of zero size") aunque copybit haya llenado 352x288.
+ */
+struct mdp_img_k {
+    uint32_t width;
+    uint32_t height;
+    uint32_t format;
+    uint32_t offset;
+    int memory_id;
+    uint32_t priv;
+};
+
+struct mdp_blit_req_k {
+    struct mdp_img_k src;
+    struct mdp_img_k dst;
+    struct mdp_rect src_rect;
+    struct mdp_rect dst_rect;
+    uint32_t alpha;
+    uint32_t transp_mask;
+    uint32_t flags;
+    int sharpening_strength;
+};
+
+static void img_to_k(struct mdp_img_k *k, struct mdp_img const *u)
 {
-    int err = ioctl(dev->mFD, MSMFB_BLIT,
-                    (struct mdp_blit_req_list const*)list);
+    k->width = u->width;
+    k->height = u->height;
+    k->format = u->format;
+    k->offset = u->offset;
+    k->memory_id = u->memory_id;
+    k->priv = 0;
+}
+
+/** copy the bits */
+static int msm_copybit(struct copybit_context_t *dev, void const *list)
+{
+    struct mdp_blit_req_list const* l = (struct mdp_blit_req_list const*)list;
+    struct {
+        uint32_t count;
+        struct mdp_blit_req_k req[12];
+    } klist;
+    unsigned int i;
+
+    if (l->count > 12)
+        return -EINVAL;
+
+    klist.count = l->count;
+    for (i = 0; i < l->count; i++) {
+        img_to_k(&klist.req[i].src, &l->req[i].src);
+        img_to_k(&klist.req[i].dst, &l->req[i].dst);
+        klist.req[i].src_rect = l->req[i].src_rect;
+        klist.req[i].dst_rect = l->req[i].dst_rect;
+        klist.req[i].alpha = l->req[i].alpha;
+        klist.req[i].transp_mask = l->req[i].transp_mask;
+        klist.req[i].flags = l->req[i].flags;
+        klist.req[i].sharpening_strength = 0;
+    }
+
+    int err = ioctl(dev->mFD, MSMFB_BLIT, &klist);
     LOGE_IF(err<0, "copyBits failed (%s)", strerror(errno));
     if (err == 0) {
         return 0;
