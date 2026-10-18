@@ -178,9 +178,11 @@ visualmente): `packages/apps/AccountsAndSyncSettings/res/drawable-*/title_bar.9.
 — si aparece el mismo síntoma ahí, revisar con cuidado antes de aplicar el
 mismo fix mecánico.
 
-**Patches:** `frameworks_base_titlebar_ninepatch.patch`,
-`packages_apps_PackageInstaller.patch`, `packages_apps_Tag.patch`,
-`packages_apps_Contacts.patch`
+**Overlay (desde 2026-10-18, antes eran parches):**
+`overlay/frameworks/base/core/res/res/drawable-*/title_bar_*.9.png`,
+`overlay/frameworks/base/packages/SystemUI/res/` (`title_bar_portrait.9.png` y
+`status_bar_expanded.xml`) y `overlay/packages/apps/{PackageInstaller,Tag,Contacts}/res/`.
+La parte Java del panel expandido sigue en `frameworks_base_statusbar_expanded.patch`.
 
 ## Doble fecha
 
