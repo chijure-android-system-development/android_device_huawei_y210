@@ -42,9 +42,6 @@ run_all() {
 # hardware/libhardware_legacy — wifi.c: soporte ath6k/AR6003 completo
 apply hardware/libhardware_legacy     hardware_libhardware_legacy.patch
 
-# system/netd — SoftAP ATH: declarar RSN pairwise para WPA2/CCMP
-apply system/netd                     system_netd.patch
-
 # frameworks/base — cámara: CameraParameters (HFR/denoise/redeye/YV12),
 #                   StagefrightRecorder, CameraService (pmem_adsp restart),
 #                   TextureManager (conversión NV21->RGB565 por software)

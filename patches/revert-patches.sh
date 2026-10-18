@@ -45,9 +45,6 @@ revert_wt hardware/libhardware_legacy hardware_libhardware_legacy.patch
 # Base: 5336b50 (msm7k: copybit: fix YUV blit order)
 revert_commits hardware/msm7k 5336b50
 
-# system/netd — working tree
-revert_wt system/netd system_netd.patch
-
 # frameworks/base — 3 commits Y210 (NV21 preview, cameraservice, StagefrightRecorder)
 # Base: aa02ad1445e (frameworks_base : Updated French Translations)
 revert_commits frameworks/base aa02ad1445e
