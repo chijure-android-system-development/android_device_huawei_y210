@@ -291,7 +291,7 @@ El primer `Unable to open connection to supplicant on
 "/data/system/wpa_supplicant/eth0"` es normal: el supplicant todavía no creó
 su socket y `WifiMonitor` reintenta.
 
-## Wi-Fi sin datos después de suspender (bug del stock, en investigación 2026-10-18)
+## Wi-Fi sin datos después de suspender (bug del stock, RESUELTO en el kernel 2026-10-18)
 
 Síntoma: tras un deep sleep con Wi-Fi asociado, al despertar `eth0` sigue
 arriba con IP y el supplicant en `COMPLETED`, pero no pasa tráfico (ping al
@@ -324,6 +324,19 @@ resume del driver queda bloqueado esperando al chip. No usar
 `MMC_CAP_NONREMOVABLE` fijo como alternativa: `mmc_rescan` dejaría de detectar
 el apagado del chip en cada Wi-Fi off/on.
 
-Intento 2 (en prueba): apagar WoW con `wmiconfig -i eth0 --setwowmode
-disable` para que el driver suspenda sin dejar el chip esperando. Si al
-despertar el Wi-Fi recupera datos solo, pasa a `wlan_loader_y210.sh`.
+Intento 2 (no sirve): `wmiconfig -i eth0 --setwowmode disable` no cambia el
+modo; el driver sigue suspendiendo en WoW cuando está asociado.
+
+Intento 3 (no sirve): detener el driver antes de suspender (`wifi_idle_ms` =
+2000). El driver suspende en deep sleep (`Suspend for 1 mode pwr 2`), pero el
+core igual hace CMD5 -110 en el resume y el Wi-Fi queda en `SCANNING` sin
+resultados. El problema es la reinicialización, no el modo.
+
+**Fix (kernel `968abe96`):** Huawei ya tenía en `msm_sdcc.c`, para el slot
+Wi-Fi con chips Broadcom, un camino que solo apaga los relojes del host y no
+llama a `mmc_suspend_host()`/`mmc_resume_host()`; con el "Qualcomm" (en el
+Y210, el Atheros AR6005) sí los llamaba. Usar el camino de relojes para el
+slot Wi-Fi siempre deja la tarjeta y el driver intactos durante la
+suspensión: no hay WoW ni reinicialización, el chip queda en su power-save
+802.11. Validado: 321 s de suspensión continua, 0 fallidas, sin CMD5 en el
+resume, Wi-Fi `COMPLETED` con la misma IP y ping OK al despertar sin off/on.

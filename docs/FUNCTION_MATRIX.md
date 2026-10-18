@@ -92,7 +92,7 @@ Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 - Wi-Fi tethering (hotspot): **OK** (validado con 2 clientes simultáneos; NAT sobre rmnet0 funcionando)
 - Carga del driver con el `wifi.c` de CM7 sin parche (`WIFI_FIRMWARE_LOADER` + `wlan_loader_y210.sh`): **OK** (2026-10-18: 3 ciclos on/off, escaneo, arranque con Wi-Fi encendido que reconecta con DHCP, ping; ver `WIFI_NOTES.md`)
 - Hotspot tras retirar `system_netd.patch` y el parche de `libhardware_legacy`: **Pendiente** revalidar con un cliente (2026-10-18)
-- Wi-Fi después de deep sleep: **No** (bug del stock: tras suspender en WoW queda sin datos hasta un off/on; en investigación, ver `WIFI_NOTES.md`)
+- Wi-Fi después de deep sleep: **OK** con el kernel propio `968abe96` (bug del stock: quedaba sin datos hasta un off/on; ver `WIFI_NOTES.md`)
 
 ### Bluetooth
 

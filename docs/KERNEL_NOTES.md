@@ -48,7 +48,8 @@ Verificar el flasheo con `dump_image` + `cmp` antes de reiniciar. Usar el
 | `9821fbe3` | Solo el sensor de cámara `mt9d113` (el del Y210); fuera s5k5ca, mt9p017, ov5647, mt9t113, hi255, mt9e013, s5k4e1, imx072, ov9726, mt9v113. Referencias del board bajo su `#ifdef` | init del kernel 6.62 → 4.09 s |
 | `681b6172` | Fuera mma8452, l3g4200d, aps-12d, aps-9900, tpa2028d1, pn544 (NFC, ~0.4 s de reintentos) | 4.09 → 3.50 s |
 | `1f37bc38` | `i2c-qup`: NACK (nadie responde en la dirección) a `dev_dbg`; timeouts y otros errores siguen como error | líneas `qup_i2c` 74 → 4 |
-| `f452f06b` + `eef19b77` | `MMC_PM_KEEP_POWER` para el slot Wi-Fi en suspend, y su revert (ver Wi-Fi tras suspensión) | revertido |
+| `f452f06b` + `eef19b77` | `MMC_PM_KEEP_POWER` para el slot Wi-Fi en suspend, y su revert | colgaba el resume |
+| `968abe96` | Slot Wi-Fi: solo apagar relojes en suspend, sin `mmc_suspend_host()` (como Huawei hacía con Broadcom) | Wi-Fi con datos tras deep sleep (bug del stock) |
 
 El árbol de Huawei es genérico para varias placas msm7x27a y prueba hardware
 que el Y210 no tiene (todas las fuentes parecen de Y100/Y200). No se pueden
