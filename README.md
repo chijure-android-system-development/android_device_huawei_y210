@@ -37,8 +37,24 @@ Wi-Fi, RIL, FM, GPS, status bar, rendimiento, logging.
 ## Sistema de patches
 
 `frameworks/base` y varios `packages/apps/*` no son propios de este repo —
-son checkouts de CyanogenMod en `detached HEAD`. Las customizaciones del Y210
-viven como `.patch` en [`patches/`](patches/), aplicados sobre esos árboles.
+son checkouts de CyanogenMod compartidos con otros ports del mismo árbol
+(LG C660, Huawei Y220). Lo que se puede resolver desde el device tree vive acá,
+sin parchear el árbol compartido:
+
+| Área | En el device tree | Mecanismo |
+|---|---|---|
+| RIL | `ril/libril` (libril de CM7 + stub `RIL_setRilSocketName`) | `TARGET_PROVIDES_LIBRIL := true` |
+| RIL | `ril/rilshim` (`libril-y210-shim.so`): traduce la API RIL v6 del blob stock a GB (SIM status, IMSI, SIM_IO, data calls) | `rild.libpath` |
+| Wi-Fi | `wifi.c` de CM7 sin modificar + `wlan_loader_y210.sh` | `WIFI_DRIVER_MODULE_ARG`, `WIFI_FIRMWARE_LOADER`, `init.huawei.rc` |
+| GPS | `gps/` (loc_api de `hardware/qcom/gps` para AMSS 50000) | sin `BOARD_VENDOR_QCOM_GPS_LOC_API_HARDWARE` |
+| Gráficos | `libgralloc`, `libcopybit` (`gralloc.y210`, `copybit.y210`) | `hw_get_module` carga `*.y210` |
+| Recursos | nine-patch de title_bar, `status_bar_expanded.xml`, `config.xml` de FM, APN de Claro PE | `DEVICE_PACKAGE_OVERLAYS` |
+
+Lo que no tiene punto de extensión en CM7 sigue como `.patch` en
+[`patches/`](patches/) (11 al 2026-10-18): cámara (`frameworks/base` y
+`packages/apps/Camera`), FM (JNI, API y app), status bar, la clase RIL en
+`PhoneFactory`, el GID 3006 de Zygote, `ThumbnailUtils` y `.m4v` en el media
+scanner.
 
 ```bash
 # Aplicar todos los patches sobre un árbol CM7 limpio
@@ -48,6 +64,15 @@ bash device/huawei/y210/patches/apply-patches.sh
 # Revertir todo (ej. antes de portar a otro dispositivo sobre el mismo árbol)
 bash device/huawei/y210/patches/revert-patches.sh
 ```
+
+`apply-patches.sh` verifica todos los patches antes de aplicar (todo o nada).
+**Ojo con `revert-patches.sh`:** hace `reset --hard` de `frameworks/base` a
+`aa02ad1445e`, y eso también borra commits locales que no son patches (hoy
+`92cf124`, el fallback de escaneo Wi-Fi). Revisar antes de usarlo.
+
+Los layouts v6 del shim RIL salen de desensamblar el `libril.so` stock del
+backup TWRP (B855), no de inferirlos por crashes; ver
+[`docs/RIL_NOTES.md`](docs/RIL_NOTES.md).
 
 ## Build
 
@@ -63,6 +88,11 @@ usando el script con tiempos/log del árbol (su default es `c660`):
 ```bash
 docker exec -it cm7-builder bash -c 'DEVICE=y210 ./timed_build.sh'
 ```
+
+El contenedor corre en Docker Desktop (VM): si git reemplaza un archivo del
+host con el contenedor encendido, adentro puede quedar la versión vieja.
+Antes de compilar, comparar `md5sum` host contra
+`docker exec cm7-builder md5sum ...` y forzar con `docker cp` si difieren.
 
 `mka bacon` compila todo `Android.mk` del árbol aunque no esté en
 `PRODUCT_PACKAGES`; por eso las apps de fábrica decompiladas (`ProjectMenuAct`,

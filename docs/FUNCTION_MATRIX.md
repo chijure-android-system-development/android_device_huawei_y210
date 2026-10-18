@@ -90,6 +90,8 @@ Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 - Escaneo/Asociación/DHCP: **OK** (según `README.md`)
 - Validación post-flash limpio (sin staging manual): **OK** (2026-07-10: build desde cero + flasheo limpio, `test_y210.sh` completo dio 54 PASS / 0 FAIL / 3 SKIP / 26 MANUAL tras corregir 2 falsos negativos del propio script — ver más abajo)
 - Wi-Fi tethering (hotspot): **OK** (validado con 2 clientes simultáneos; NAT sobre rmnet0 funcionando)
+- Carga del driver con el `wifi.c` de CM7 sin parche (`WIFI_FIRMWARE_LOADER` + `wlan_loader_y210.sh`): **OK** (2026-10-18: 3 ciclos on/off, escaneo, arranque con Wi-Fi encendido que reconecta con DHCP, ping; ver `WIFI_NOTES.md`)
+- Hotspot tras retirar `system_netd.patch` y el parche de `libhardware_legacy`: **Pendiente** revalidar con un cliente (2026-10-18)
 
 ### Bluetooth
 
@@ -115,6 +117,8 @@ Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 - NTP / UTC injection: **OK**
 - AGPS (UMTS SLP): **OK**
 - Fix real con satélites: **OK** (2026-07-10: prueba al aire libre en Lima, Perú — hasta 9 satélites detectados, coordenadas finales estables `-12.2944, -76.8588` vía `RPC_LOC_EVENT_PARSED_POSITION_REPORT`. Nota menor: las sentencias NMEA de texto (`loc_eng_report_nmea`) llegan vacías (solo `$`), no afecta al LocationManager pero cualquier app que dependa de NMEA crudo no tendría datos — no investigado más a fondo)
+
+- XDR de NMEA: **Pendiente** de corregir y validar. El stock decodifica `nmea_sentences` con 200 bytes (`libloc_api-rpc-qc.so`, misma versión RPC `0x00050001`); el `gen-50000` de CM7 usa 1200 y el buffer agrandado solo lo tapa. Requiere una sesión GPS activa para validar.
 
 Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 
@@ -144,6 +148,10 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 ### Radio / Telefonía (RIL)
 
 - Baseband / operador / señal: **OK** (ver `device/huawei/y210/RIL_NOTES.md`)
+- Estado de SIM / IMSI / SPN: **OK** (2026-10-18: `gsm.sim.state=READY`, `gsm.sim.operator.numeric=71610`, SPN "Claro" leído de la SIM; antes quedaba en `UNKNOWN` por el desfase RIL v6 — lo resuelve `ril/rilshim`)
+- Lista de APN en Ajustes sin parchear Settings: **OK** (2026-10-18; APN de Claro PE desde overlay de `framework-res`)
+- Datos con traducción v6 del shim: **OK** (2026-10-18: `SETUP_DATA_CALL {cid, rmnet0, ip}`, ciclo `svc data disable/enable`, ping/DNS)
+- PIN de SIM / bloqueo de SIM: **Pendiente** (sin probar con una SIM con PIN)
 - IMEI (`service call iphonesubinfo 1`): **OK**
 - Llamadas (voz): **OK** (entrante/saliente)
 - SMS: **OK** (enviar/recibir)
