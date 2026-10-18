@@ -90,8 +90,12 @@ H.263 352x288), FM (chip, firmware, `READY_EVENT`), sensores, zram (ver
 PERFORMANCE_NOTES.md) y deep sleep continuo. 0 crashes y 0 tombstones en los
 benchmarks.
 
-Pendiente con el kernel propio: audio en llamada, Bluetooth A2DP y audio de
-FM con auriculares (requieren pruebas manuales).
+Llamadas con el kernel propio (2026-10-18): entrante y saliente OK, audio en
+ambos sentidos por auricular y altavoz confirmado por el usuario, mute OK,
+fin de llamada con causa 16 (normal). Los `audmgr_rpc ... DISABLED` de dmesg
+son el aviso normal de cierre de sesión de audio.
+
+Pendiente con el kernel propio: Bluetooth A2DP y audio de FM con auriculares.
 
 ## Wi-Fi tras suspensión
 
