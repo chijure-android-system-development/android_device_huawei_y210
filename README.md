@@ -31,6 +31,10 @@ video), GPS, deep sleep.
 Fuente de verdad detallada (checklist + comandos de log por área):
 [`docs/FUNCTION_MATRIX.md`](docs/FUNCTION_MATRIX.md).
 
+Kernel: [`docs/KERNEL_NOTES.md`](docs/KERNEL_NOTES.md) (código en
+github.com/chijure/android_kernel_huawei_y210, cómo compilar y probar un
+`boot.img`, cambios y dmesg comparado con el stock).
+
 Documentación técnica por área: [`docs/`](docs/) — audio, cámara, gráficos,
 Wi-Fi, RIL, FM, GPS, status bar, rendimiento, logging.
 

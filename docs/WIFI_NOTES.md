@@ -290,3 +290,40 @@ kernel: mmc1: new high speed SDIO card at address 0001
 El primer `Unable to open connection to supplicant on
 "/data/system/wpa_supplicant/eth0"` es normal: el supplicant todavía no creó
 su socket y `WifiMonitor` reintenta.
+
+## Wi-Fi sin datos después de suspender (bug del stock, en investigación 2026-10-18)
+
+Síntoma: tras un deep sleep con Wi-Fi asociado, al despertar `eth0` sigue
+arriba con IP y el supplicant en `COMPLETED`, pero no pasa tráfico (ping al
+gateway falla) hasta apagar y prender el Wi-Fi. El usuario confirma que el
+stock tiene el mismo bug.
+
+Secuencia en dmesg:
+
+```
+ar6000: Setup WoW successfully / ar6000_suspend_ev:Suspend for wow mode 3
+(resume) mmc1: req failed (CMD5): -110, retrying...   x3
+mmc1: error -110 during resume (card was removed?)
+```
+
+y nunca aparece el resume del driver (`ar6000_resume_ev`).
+
+Causa: `ar6000.ko` (binario) arma WoW y deja el chip alimentado por la placa,
+pero nunca llama a `sdio_set_host_pm_flags(MMC_PM_KEEP_POWER)` (no está entre
+sus símbolos). Sin el flag el core MMC del 2.6.38 cree que la tarjeta se apagó
+y la reinicializa al despertar; el chip, que sigue en WoW, no responde a CMD5.
+El `sdc2_plat_data` y el código de `msm_sdcc.c` del kernel stock son idénticos
+(comparado byte a byte contra el zImage stock descomprimido), así que no es una
+regresión del kernel propio.
+
+Intento 1 (`f452f06b`, revertido en `eef19b77`): forzar `MMC_PM_KEEP_POWER`
+para el slot Wi-Fi en `msmsdcc_runtime_suspend`. Con eso el teléfono **no
+despertó**: cuelgue duro con pantalla negra, recuperado manteniendo el botón
+de encendido (`poweron_irq=0x1` = tecla, sin datos en apanic). Probablemente el
+resume del driver queda bloqueado esperando al chip. No usar
+`MMC_CAP_NONREMOVABLE` fijo como alternativa: `mmc_rescan` dejaría de detectar
+el apagado del chip en cada Wi-Fi off/on.
+
+Intento 2 (en prueba): apagar WoW con `wmiconfig -i eth0 --setwowmode
+disable` para que el driver suspenda sin dejar el chip esperando. Si al
+despertar el Wi-Fi recupera datos solo, pasa a `wlan_loader_y210.sh`.
