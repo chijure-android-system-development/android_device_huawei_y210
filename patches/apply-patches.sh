@@ -36,8 +36,9 @@ copy_new() {
 
 run_all() {
 
-# hardware/ril — libril: RIL_setRilSocketName stub, sanitizeRilString,
-#                         version negotiation flexible, unsol 1031-1037
+# hardware/ril — libril: solo el stub RIL_setRilSocketName. El blob lo enlaza
+#                y el linker de GB no lo busca en el shim (dlopen). El resto
+#                del desfase v6 lo resuelve ril/rilshim.
 apply hardware/ril                    hardware_ril.patch
 
 # hardware/libhardware_legacy — wifi.c: soporte ath6k/AR6003 completo
@@ -51,9 +52,9 @@ apply system/netd                     system_netd.patch
 #                   TextureManager (conversión NV21->RGB565 por software)
 apply frameworks/base                 frameworks_base_camera.patch
 
-# frameworks/base — RIL/telephony: DataConnection (respuesta QCRIL malformada),
-#                   RIL.java/RILConstants (unsol 1037), GsmDataConnectionTracker
-#                   (fallback de operator numeric), Zygote (GID AID_QCOM_ONCRPC)
+# frameworks/base — Zygote: GID 3006 (AID_QCOM_ONCRPC) para system_server.
+#                   Lo de DataConnection/RIL.java/GsmDataConnectionTracker lo
+#                   resuelve ril/rilshim.
 apply frameworks/base                 frameworks_base_telephony.patch
 
 # frameworks/base — PhoneFactory: rama faltante para instanciar HuaweiQualcommRIL
