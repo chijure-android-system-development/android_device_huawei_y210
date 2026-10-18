@@ -221,3 +221,34 @@ Cuidado al medir apertura de apps con `am start -W`: con la pantalla apagada
 `TotalTime` sale en decenas de segundos (GB no da la actividad por mostrada
 hasta que enciende), y sin `-a android.intent.action.MAIN` Contactos tira
 un NPE en `DialtactsActivity.onCreate` (`intent.getAction()`).
+
+## Dexpreopt (2026-10-18)
+
+`WITH_DEXPREOPT := true` en `BoardConfig.mk`: los `.odex` se generan en el
+host y van a `/system` (72 archivos). Funciona en `eng`; la regla de
+`package.mk` no depende de la variante.
+
+| | `eng` sin dexpreopt | `eng` + dexpreopt |
+|---|---|---|
+| arranque normal (cache ya hecha) | 33 s | 33 / 32 s |
+| primer arranque tras `wipe dalvik` | minutos (dexopt de todo) | pantalla lista a 20.9 s de uptime |
+| `/data/dalvik-cache` | 28 MB | 0.3 MB |
+| `/data` libre | 88 MB | 117 MB |
+| `/system` usado | 130.7 MB (69 %) | 149.7 MB (79 %) |
+| arranque en frío, promedio de 8 apps | 518 ms | 488 ms |
+| relanzar Galería/Mensajes/Contactos | 640/632/652 ms | 639/645/651 ms |
+
+En uso diario casi no cambia (en `eng` las apps ya quedaban optimizadas en
+`/data` tras el primer arranque); la ganancia es espacio en `/data` y
+arranques rápidos después de flashear o borrar dalvik.
+
+Variantes: `breakfast` siempre elige `-eng` (`build/envsetup.sh`), aunque
+`timed_build.sh` imprima `-userdebug`. Un build `userdebug` (`lunch
+cyanogen_y210-userdebug`) falla porque activa ProGuard en todas las apps y
+FileManager no lo soporta en este árbol (referencias a clases de Honeycomb);
+habría que poner `LOCAL_PROGUARD_ENABLED := disabled` en su `Android.mk`. Lo
+que `userdebug` agrega sobre `eng` + dexpreopt (`ro.secure=1`, sin módulos
+`eng`, ProGuard) es marginal para rendimiento; CheckJNI ya está apagado por
+`system.prop`. Ojo: `system.prop` copia `ro.build.type=user` y
+`ro.build.description` del stock, así que `getprop ro.build.type` dice `user`
+aunque el build sea `eng`.

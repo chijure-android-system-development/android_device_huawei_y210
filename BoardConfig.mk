@@ -30,6 +30,12 @@ TARGET_PROVIDES_LIBAUDIO := true
 
 # TARGET_PROVIDES_LIBLIGHTS := true
 
+# Dalvik: preoptimizar en el host (.odex en /system). Sin esto cada .apk/.jar
+# se optimiza en el primer arranque a /data/dalvik-cache (~28 MB en una /data
+# de 160 MB). breakfast elige siempre -eng; para userdebug: lunch
+# cyanogen_y210-userdebug.
+WITH_DEXPREOPT := true
+
 # GPS: gps.y210 se compila desde gps/ (loc_api de hardware/qcom/gps para
 # AMSS 50000). Sin BOARD_VENDOR_QCOM_GPS_LOC_API_HARDWARE, hardware/qcom/gps
 # no entra al build y no hay modulos duplicados.
