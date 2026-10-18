@@ -93,8 +93,8 @@ fi
 
 if section display "PANTALLA / GRÁFICOS"; then
     chk_file "Framebuffer fb0"          "/dev/graphics/fb0"
-    chk_file "gralloc.msm7k.so"        "/system/lib/hw/gralloc.msm7k.so"
-    chk_file "copybit.msm7k.so"        "/system/lib/hw/copybit.msm7k.so"
+    chk_file "gralloc.y210.so"         "/system/lib/hw/gralloc.y210.so"
+    chk_file "copybit.y210.so"         "/system/lib/hw/copybit.y210.so"
     chk_file "libsurfaceflinger.so"    "/system/lib/libsurfaceflinger.so"
     chk_file "libEGL_adreno200.so"     "/system/lib/egl/libEGL_adreno200.so"
     chk_file "libGLESv1_CM_adreno200"  "/system/lib/egl/libGLESv1_CM_adreno200.so"
@@ -274,6 +274,7 @@ fi
 
 if section ril "RIL / TELEFONÍA"; then
     chk_file "libril-qc-1.so"  "/system/lib/libril-qc-1.so"
+    chk_file "libril-y210-shim.so" "/system/lib/libril-y210-shim.so"
     _bb=$(adb_sh getprop gsm.version.baseband)
     if [[ -n "$_bb" ]]; then pass "Baseband: $_bb"; \
     else fail "Baseband" "gsm.version.baseband vacío"; fi
