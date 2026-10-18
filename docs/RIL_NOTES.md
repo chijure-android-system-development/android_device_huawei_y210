@@ -261,17 +261,45 @@ del Y210 B855, verificado por md5 contra el backup TWRP stock) usa la API RIL
 no escribía ninguna, y `HuaweiQualcommRIL.responseIccCardStatus` tiraba
 `IndexOutOfBoundsException` en `getApplication(0)`.
 
-Al destrabar la SIM apareció el siguiente desfase: `GET_IMSI` en v6 recibe el
-AID, libril de GB lo despacha con `data=NULL` y el blob crasheaba
-(SIGSEGV en `qcril_uim_request_get_imsi`). `SIM_IO` v6 agrega `aidPtr`.
+Al destrabar la SIM aparecieron los desfases de las peticiones. Los layouts
+se tomaron desensamblando el `libril.so` stock (backup TWRP B855, base prelink
+`0xae600000`, tabla `s_commands` en `.data`), no infiriéndolos por crashes:
 
-Fix en el device tree, sin tocar `hardware/ril`: `ril/rilshim`
-(`libril-y210-shim.so`, apuntado por `rild.libpath`). Carga el blob, traduce
-`GET_SIM_STATUS` v6 -> v5 y agrega el AID de la app GSM/USIM a `GET_IMSI` y
-`SIM_IO`. `HuaweiQualcommRIL` ya no lee el índice IMS. Resultado:
-`gsm.sim.state=READY`, `gsm.sim.operator.numeric=71610` y la lista de APNs
-de Settings funciona sin parche. Log esperado:
-`RILShim: GET_SIM_STATUS v6->v5: card=1 gsm=0 cdma=-1 ims=-1 apps=2`.
+- `GET_IMSI`: el stock usa `dispatchStrings` con `{aid}`; GB usa
+  `dispatchVoid` y el blob desreferenciaba NULL (SIGSEGV en
+  `qcril_uim_request_get_imsi`).
+- `SIM_IO`: `dispatchSIM_IO` del stock hace `memset` de 40 bytes, deja la
+  primera palabra en 0, pone los campos de GB desde el offset 4 y `aidPtr` en
+  el 36, y pasa `datalen` 40 si `version > 5`. Con el struct de GB el blob leía
+  el AID de la pila (crash en `vfprintf`, `qcril_uim_request_sim_io(aid: %s)`);
+  con los campos corridos respondía `REQUEST_NOT_SUPPORTED`.
+- `SETUP_DATA_CALL`, `DATA_CALL_LIST` y `UNSOL_DATA_CALL_LIST_CHANGED`: 32 bytes
+  `{status, cid, active, type, ifname, addresses, dnses, gateways}` (formato
+  del log stock `[status=%d,cid=%d,...]`). La petición es igual que en GB
+  (7 strings con `protocol`).
+- Unsolicited: según el `RILConstants` del `framework.jar` stock, 1037 es
+  `RIL_UNSOL_RESPONSE_DATA_NETWORK_STATE_CHANGED` (el stock notifica
+  `mDataNetworkStateRegistrants`) y 1034 `VOICE_RADIO_TECH_CHANGED`.
 
-Pendiente del mismo origen: `SETUP_DATA_CALL` (`RIL_Data_Call_Response_v6`),
-hoy cubierto por el hack de `DataConnection` y por `sanitizeRilString`.
+qcril procesa las peticiones en su propio hilo: los parámetros que arma el
+shim viven en heap hasta su `OnRequestComplete`.
+
+Fix en el device tree: `ril/rilshim` (`libril-y210-shim.so`, apuntado por
+`rild.libpath`). Carga el blob, se registra como `RIL_VERSION`, traduce
+`GET_SIM_STATUS` v6 -> v5, agrega el AID a `GET_IMSI` y `SIM_IO`, convierte
+`SETUP_DATA_CALL` a `{cid, ifname, ip}` (GB lee dns y gw de `net.rmnet0.*`),
+las listas de data calls a `RIL_Data_Call_Response` v4, reenvía 1037 como
+`UNSOL_RESPONSE_NETWORK_STATE_CHANGED` y descarta el resto de códigos v6.
+`HuaweiQualcommRIL` ya no lee el índice IMS. Resultado validado:
+`gsm.sim.state=READY`, `gsm.sim.operator.numeric=71610`, SPN "Claro" leído de
+la SIM, 24 `SIM_IO` OK, datos con ping/DNS y ciclo `svc data disable/enable`,
+sin tombstones. Logs esperados:
+
+```
+RILShim: GET_SIM_STATUS v6->v5: card=1 gsm=0 cdma=-1 ims=-1 apps=2
+RILShim: SETUP_DATA_CALL v6->v4: cid=0 ifname=rmnet0 ip=10.90.79.2 active=2
+RILJ: [UNSL]< UNSOL_DATA_CALL_LIST_CHANGED [DataCallState: { cid: 0, active: 2, ...
+```
+
+Los 3 `SIM_IO` con `GENERIC_FAILURE` (6FCA MWIS, 6FCB CFIS, 6FCD SPDI bajo
+7F20) son archivos opcionales ausentes en la USIM; es normal.
