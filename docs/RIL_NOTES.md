@@ -249,3 +249,29 @@ Pendiente (no resuelto todavía):
   - `adb logcat -b radio -d | grep -i "IccCard\\|SIM_STATE\\|CommandsInterface.RadioState"`
   - Revisar si `QualcommNoSimReadyRIL.IccHandler` (el hilo interno que
     consulta el estado del ICC) realmente se dispara y con qué resultado.
+
+### Resuelto (2026-10-18): `gsm.sim.state=UNKNOWN` era un desfase de API RIL v6
+
+La causa no estaba en `IccCard`/`SIMRecords`. `libril-qc-1.so` (blob stock
+del Y210 B855, verificado por md5 contra el backup TWRP stock) usa la API RIL
+**v6** y el `libril` de CM7 es v4/v5. Con un log en `responseSimStatus`:
+`responselen=280` contra `sizeof(RIL_CardStatus)=276`, y
+`w=[1,0,0,-1,-1,2,2,5]`: `RIL_CardStatus_v6` tiene `ims_subscription_app_index`
+(-1) antes de `num_applications`. libril leía ese -1 como cantidad de apps,
+no escribía ninguna, y `HuaweiQualcommRIL.responseIccCardStatus` tiraba
+`IndexOutOfBoundsException` en `getApplication(0)`.
+
+Al destrabar la SIM apareció el siguiente desfase: `GET_IMSI` en v6 recibe el
+AID, libril de GB lo despacha con `data=NULL` y el blob crasheaba
+(SIGSEGV en `qcril_uim_request_get_imsi`). `SIM_IO` v6 agrega `aidPtr`.
+
+Fix en el device tree, sin tocar `hardware/ril`: `ril/rilshim`
+(`libril-y210-shim.so`, apuntado por `rild.libpath`). Carga el blob, traduce
+`GET_SIM_STATUS` v6 -> v5 y agrega el AID de la app GSM/USIM a `GET_IMSI` y
+`SIM_IO`. `HuaweiQualcommRIL` ya no lee el índice IMS. Resultado:
+`gsm.sim.state=READY`, `gsm.sim.operator.numeric=71610` y la lista de APNs
+de Settings funciona sin parche. Log esperado:
+`RILShim: GET_SIM_STATUS v6->v5: card=1 gsm=0 cdma=-1 ims=-1 apps=2`.
+
+Pendiente del mismo origen: `SETUP_DATA_CALL` (`RIL_Data_Call_Response_v6`),
+hoy cubierto por el hack de `DataConnection` y por `sanitizeRilString`.

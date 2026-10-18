@@ -164,7 +164,8 @@ public class HuaweiQualcommRIL extends QualcommNoSimReadyRIL implements Commands
         status.setUniversalPinState(p.readInt());
         status.setGsmUmtsSubscriptionAppIndex(p.readInt());
         status.setCdmaSubscriptionAppIndex(p.readInt());
-        p.readInt(); // ImsSubscriptionAppIndex
+        // El blob es v6 (con ImsSubscriptionAppIndex), pero libril-y210-shim
+        // ya lo traduce a v5 y libril de GB no escribe ese campo al Parcel.
         int numApplications = p.readInt();
 
         // limit to maximum allowed applications
@@ -195,7 +196,10 @@ public class HuaweiQualcommRIL extends QualcommNoSimReadyRIL implements Commands
             Log.d(LOG_TAG, "This is a GSM PHONE " + appIndex);
         }
 
-        IccCardApplication application = status.getApplication(appIndex);
+        IccCardApplication application = null;
+        if (appIndex >= 0 && appIndex < numApplications) {
+            application = status.getApplication(appIndex);
+        }
         mAid = application != null ? application.aid : null;
 
         return status;

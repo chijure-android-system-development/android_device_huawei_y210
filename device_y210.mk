@@ -30,6 +30,10 @@ PRODUCT_PACKAGES += \
     audio.a2dp.default \
     libaudioutils
 
+# RIL: shim v6 -> v5 entre rild y libril-qc-1.so
+PRODUCT_PACKAGES += \
+    libril-y210-shim
+
 # Other
 PRODUCT_PACKAGES += \
     lights.y210 \
