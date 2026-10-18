@@ -1338,3 +1338,22 @@ llega `SEEK_COMPLETE`; la frecuencia no cambia. El audio, la sintonía manual y
 la búsqueda hacia arriba funcionan. Sin confirmar si pasa igual con el kernel
 stock. `RSSI check` devuelve siempre 100, también en frecuencias distintas.
 
+Análisis (2026-10-18): el kernel stock se comporta igual (probado flasheando
+el `boot.img` stock), así que no es una regresión del kernel propio. Dos
+causas encadenadas:
+
+1. **JNI (corregido):** `fmStartSearchNative` usaba el control privado
+   `SRCHON` con valor `dir ? 1 : 0`; hacia abajo mandaba `SRCHON=0`, que en
+   `radio-tavarua` significa "apagar la búsqueda", y además ese control
+   siempre busca hacia arriba. Ahora usa `VIDIOC_S_HW_FREQ_SEEK` con
+   `seek_upward = dir` y `wrap_around = 1`, que en el driver es
+   `tavarua_search(radio, CTRL_ON, SRCH_DIR_UP/DOWN)`. Ojo: el driver
+   devuelve el resultado de `marimba_write()` (> 0 si todo va bien), así que
+   el éxito es `ioctl() >= 0`, no `== 0`.
+2. **Chip (sin resolver):** con la dirección correcta, el WCN2243 igual
+   responde con el bit `ERROR` de `STATUS_REG3` y no hay `SEEK_COMPLETE`. Hacia
+   arriba con vuelta al principio de la banda funciona y recorre toda la banda.
+   Para seguir: compilar `radio-tavarua` con `FM_DEBUG` (ojo con el `#undef
+   FM_DEBUG` de `include/media/tavarua.h`) para leer `ERROR_CODE`, o comparar
+   el `SRCHCTRL` que arma el stack de FM stock.
+

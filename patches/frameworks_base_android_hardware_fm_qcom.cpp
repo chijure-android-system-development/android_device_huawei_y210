@@ -233,15 +233,26 @@ static jint fmSetControlNative(JNIEnv* /*env*/, jobject /*thiz*/, jint fd, jint 
 
 static jint fmStartSearchNative(JNIEnv* /*env*/, jobject /*thiz*/, jint fd, jint dir)
 {
-    // Java configures search parameters via setControlNative(). Here we just
-    // try to kick off search using the private SRCHON control commonly used
-    // by tavarua stacks (V4L2_CID_PRIVATE_BASE + 3).
-    const jint V4L2_CID_PRIVATE_TAVARUA_SRCHON = V4L2_CID_PRIVATE_BASE + 3;
-    if (fmSetControlNative(NULL, NULL, fd, V4L2_CID_PRIVATE_TAVARUA_SRCHON, dir ? 1 : 0) == FM_JNI_SUCCESS) {
+    // Java configures search parameters (mode, dwell, ...) via
+    // setControlNative(); here we only start the search. VIDIOC_S_HW_FREQ_SEEK
+    // is what radio-tavarua uses for the direction: tavarua_search(radio,
+    // CTRL_ON, seek_upward ? SRCH_DIR_UP : SRCH_DIR_DOWN). The private SRCHON
+    // control always searches up, and SRCHON=0 means "stop": with it a
+    // downward search left the chip in ERROR STATE and never completed.
+    struct v4l2_hw_freq_seek seek;
+    memset(&seek, 0, sizeof(seek));
+    seek.type = V4L2_TUNER_RADIO;
+    seek.seek_upward = dir ? 1 : 0;
+    seek.wrap_around = 1;
+    // radio-tavarua returns the marimba_write() result: > 0 on success.
+    if (ioctl(fd, VIDIOC_S_HW_FREQ_SEEK, &seek) >= 0) {
         return FM_JNI_SUCCESS;
     }
-    // Fallback: some implementations expect 1/2 instead of 0/1.
-    return fmSetControlNative(NULL, NULL, fd, V4L2_CID_PRIVATE_TAVARUA_SRCHON, dir ? 1 : 2);
+    LOGW("VIDIOC_S_HW_FREQ_SEEK dir=%d failed: %s", dir, strerror(errno));
+
+    // Fallback: SRCHON only searches upward in this driver.
+    const jint V4L2_CID_PRIVATE_TAVARUA_SRCHON = V4L2_CID_PRIVATE_BASE + 3;
+    return fmSetControlNative(NULL, NULL, fd, V4L2_CID_PRIVATE_TAVARUA_SRCHON, 1);
 }
 
 static jint fmCancelSearchNative(JNIEnv* /*env*/, jobject /*thiz*/, jint fd)
