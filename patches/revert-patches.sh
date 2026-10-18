@@ -55,7 +55,6 @@ revert_commits packages/apps/Camera 434f8777
 
 # packages/apps/FM — working tree
 revert_wt packages/apps/FM packages_apps_FM.patch
-revert_wt hardware/qcom/gps hardware_qcom_gps.patch
 
 
 # vendor/cyanogen — working tree + archivo nuevo

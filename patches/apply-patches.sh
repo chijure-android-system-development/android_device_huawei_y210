@@ -111,9 +111,8 @@ apply packages/apps/Camera            packages_apps_Camera.patch
 #                    (config.xml: overlay/packages/apps/FM)
 apply packages/apps/FM                packages_apps_FM.patch
 
-# hardware/qcom/gps — NMEA AMSS 50000: el XDR escribe 1200 bytes y el
-#                     struct tenía 200, así que cada reporte pisaba el evento.
-apply hardware/qcom/gps               hardware_qcom_gps.patch
+# hardware/qcom/gps — ya no se parchea: gps.y210 se compila desde gps/
+#                     (buffer NMEA de 1200 para AMSS 50000).
 
 # packages/apps/Settings — ya no se parchea: el fallback a gsm.operator.numeric
 # tapaba la SIM en UNKNOWN, resuelto por ril/rilshim (ver docs/RIL_NOTES.md).

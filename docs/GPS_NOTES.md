@@ -97,3 +97,14 @@ adb shell "cat /proc/$(adb shell pidof system_server)/status | grep Groups"
 - Fix real (satélites) en exteriores — prueba a cielo abierto sin obstáculos.
   Cuando se obtenga fix, actualizar `FUNCTION_MATRIX.md`:
   `GPS → Fix + ubicación real: OK`
+
+## gps.y210 desde el device tree (2026-10-18)
+
+`hardware_qcom_gps.patch` se retiró. `gps/` tiene la copia de
+`hardware/qcom/gps/loc_api` (CM7 `c05e328`) solo para AMSS 50000
+(`libloc_api-rpc` con `gen-50000`/`inc-50000` y `libloc_api`), con el buffer
+NMEA de 1200 bytes y el reporte hasta el primer NUL ya aplicados. El
+`BoardConfig.mk` no define `BOARD_VENDOR_QCOM_GPS_LOC_API_HARDWARE`, así que
+`hardware/qcom/gps/Android.mk` no incluye nada y no hay módulos duplicados.
+La `gps.y210.so` resultante es idéntica byte a byte (md5 `dd61c1e3...`) a la
+que salía del árbol parcheado.
