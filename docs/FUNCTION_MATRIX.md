@@ -146,6 +146,8 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 - SDCard (montaje): **OK**
 - Modo almacenamiento masivo USB (UMS): **OK**
 
+- Búsqueda de FM hacia abajo: **No** (hacia arriba OK; ver `FM_NOTES.md`, 2026-10-18)
+
 ### Radio / Telefonía (RIL)
 
 - Baseband / operador / señal: **OK** (ver `device/huawei/y210/RIL_NOTES.md`)

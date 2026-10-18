@@ -1326,3 +1326,15 @@ Quedaron sin aplicar (confirmados como reales pero de menor severidad o que toca
 **Control rápido ya hecho (2026-07-12): FM con Bluetooth completamente apagado -- sin cambio, descarta regulador/hardware compartido como causa por sí solo.** Confirmado con dmesg que BT se apagó de verdad (`hci0` desaparece de `hciconfig`, `Bluetooth: HCI_IBS stats: vote ticks: on=1192, off=455058` justo antes de la prueba). Con BT off, el patrón `snd_set_device`/`tavarua_radio` al encender FM es idéntico al de siempre (mismo baile 26→3→26) y el resultado audible es el mismo (estática, sin cambio). Esto descarta que el simple estado ON/OFF de BT (o la configuración de reguladores `internal_vreg_ctl[bt_status]` que el driver ajusta según ese estado) sea la causa -- pero **no** descarta todavía la hipótesis más fuerte (SCO/HFP activo compitiendo en tiempo real por los mismos pines), que sigue pendiente de auricular BT con micrófono.
 
 **Para seguir desde aquí se necesitaría instrumentación que no tenemos hoy:** un analizador lógico en las líneas físicas I2S (GPIO 68/70/71) para ver si hay datos reales viajando y si cambian con la sintonía, o símbolos de depuración del firmware AMSS del ARM9. Sin eso, este es el techo real de la investigación por software puro.
+
+## Búsqueda hacia abajo no termina (2026-10-18)
+
+Con el kernel propio (github.com/chijure/android_kernel_huawei_y210): la
+búsqueda hacia arriba (`MEDIA_NEXT`, `searchStations ... direction: 1`)
+termina con `SEEK_COMPLETE_EVENT` y sintoniza la emisora siguiente; hacia
+abajo (`MEDIA_PREVIOUS` o el botón de la app, `direction: 0`) el chip
+responde `tavarua_radio: ERROR STATE` (bit `ERROR` de `STATUS_REG3`) y no
+llega `SEEK_COMPLETE`; la frecuencia no cambia. El audio, la sintonía manual y
+la búsqueda hacia arriba funcionan. Sin confirmar si pasa igual con el kernel
+stock. `RSSI check` devuelve siempre 100, también en frecuencias distintas.
+

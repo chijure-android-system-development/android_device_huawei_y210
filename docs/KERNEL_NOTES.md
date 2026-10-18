@@ -95,7 +95,14 @@ ambos sentidos por auricular y altavoz confirmado por el usuario, mute OK,
 fin de llamada con causa 16 (normal). Los `audmgr_rpc ... DISABLED` de dmesg
 son el aviso normal de cierre de sesión de audio.
 
-Pendiente con el kernel propio: Bluetooth A2DP y audio de FM con auriculares.
+FM con el kernel propio (2026-10-18): audio limpio por auriculares y
+altavoz (confirmado por el usuario), sintonía manual OK (87.5/98.1/97.4/97.3)
+y búsqueda hacia arriba OK (`SEEK_COMPLETE`, 97.3 → 100.1 → 101.1). La
+búsqueda hacia abajo no termina: el chip responde `tavarua_radio: ERROR
+STATE` y no llega `SEEK_COMPLETE` (ver FM_NOTES.md). Falta confirmar si con el
+kernel stock pasa lo mismo; la única prueba previa de seek fue hacia arriba.
+
+Pendiente con el kernel propio: Bluetooth A2DP.
 
 ## Wi-Fi tras suspensión
 
