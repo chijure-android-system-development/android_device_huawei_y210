@@ -12,6 +12,14 @@ del equipo) y agrega `SWAP`, `ZRAM`, `LZO`, kernel `LZMA`, `TUN` y MTP. El
 `vermagic` (`2.6.38.6-perf preempt mod_unload ARMv7`) coincide con el de
 `ar6000.ko`, el único módulo binario externo, y no hay `MODVERSIONS`.
 
+## Kernel incluido en el device tree
+
+`device/huawei/y210/kernel` (`TARGET_PREBUILT_KERNEL`) es, desde
+2026-10-18, el zImage compilado de github.com/chijure/android_kernel_huawei_y210
+en el commit `968abe96` con `y210_defconfig` (md5
+`3993a0e47c34d5e423dccfbc6ee8f3e1`). El anterior era el zImage stock de Huawei
+(está en el historial de git). Al actualizarlo, anotar el commit y el md5 acá.
+
 ## Compilar
 
 En el host (no hace falta el contenedor), ~1.5 min:
