@@ -184,7 +184,7 @@ Síntoma:
   `mServiceState=0 home Claro Claro 71610 HSPA`), pero `gsm.sim.state` queda
   siempre en `UNKNOWN`, y `gsm.sim.operator.numeric`/`.alpha` quedan vacíos
   (rompía el llenado automático de APN y el filtro de la lista de APNs en
-  Settings, ver `packages_apps_Settings.patch`).
+  Settings; el antiguo `packages_apps_Settings.patch` se retiró el 2026-10-18).
 
 Causa real (root cause, confirmada leyendo `PhoneFactory.java`):
 

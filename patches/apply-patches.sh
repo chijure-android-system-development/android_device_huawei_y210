@@ -118,8 +118,8 @@ apply packages/apps/FM                packages_apps_FM.patch
 #                     struct tenía 200, así que cada reporte pisaba el evento.
 apply hardware/qcom/gps               hardware_qcom_gps.patch
 
-# packages/apps/Settings — APN editor / APN settings para Claro Perú
-apply packages/apps/Settings          packages_apps_Settings.patch
+# packages/apps/Settings — ya no se parchea: el fallback a gsm.operator.numeric
+# tapaba la SIM en UNKNOWN, resuelto por ril/rilshim (ver docs/RIL_NOTES.md).
 
 # vendor/cyanogen — APN Claro Perú (recortado: se saco un hunk que borraba
 # ~60 entradas de products/AndroidProducts.mk y rompia breakfast/lunch de
