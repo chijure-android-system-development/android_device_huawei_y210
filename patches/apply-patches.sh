@@ -36,10 +36,8 @@ copy_new() {
 
 run_all() {
 
-# hardware/ril — libril: solo el stub RIL_setRilSocketName. El blob lo enlaza
-#                y el linker de GB no lo busca en el shim (dlopen). El resto
-#                del desfase v6 lo resuelve ril/rilshim.
-apply hardware/ril                    hardware_ril.patch
+# hardware/ril — ya no se parchea: libril propio en ril/libril
+#                (TARGET_PROVIDES_LIBRIL) y desfase v6 en ril/rilshim.
 
 # hardware/libhardware_legacy — wifi.c: soporte ath6k/AR6003 completo
 apply hardware/libhardware_legacy     hardware_libhardware_legacy.patch

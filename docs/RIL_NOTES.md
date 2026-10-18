@@ -303,3 +303,17 @@ RILJ: [UNSL]< UNSOL_DATA_CALL_LIST_CHANGED [DataCallState: { cid: 0, active: 2, 
 
 Los 3 `SIM_IO` con `GENERIC_FAILURE` (6FCA MWIS, 6FCB CFIS, 6FCD SPDI bajo
 7F20) son archivos opcionales ausentes en la USIM; es normal.
+
+### libril propio (2026-10-18)
+
+`hardware_ril.patch` se retiró: el libril de CM7 (hardware/ril `a5f51f0`) más
+el stub `RIL_setRilSocketName` vive en `ril/libril` y reemplaza al de
+hardware/ril con `TARGET_PROVIDES_LIBRIL := true` (la variable que lee
+`hardware/ril/Android.mk`; el `BOARD_PROVIDES_LIBRIL` que figuraba comentado
+en `BoardConfig.mk` no existe en CM7). El stub tiene que estar en libril y no
+en el shim: el blob declara `NEEDED libril.so` y el linker de GB solo busca
+símbolos en la propia librería, en `LD_PRELOAD` y en sus `DT_NEEDED`.
+
+`ril/Android.mk` es necesario: `all-makefiles-under` del `Android.mk` raíz
+solo baja un nivel, y sin él `ril/libril` y `ril/rilshim` no entran al build
+completo (solo compilaban con `mmm`).

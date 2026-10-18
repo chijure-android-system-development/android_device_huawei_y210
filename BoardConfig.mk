@@ -72,8 +72,9 @@ BOARD_GLOBAL_CFLAGS += -DHAVE_FM_RADIO
 # Qualcomm "tavarua" style V4L2 radio device.
 BOARD_FM_DEVICE := qcom
 
-# RIL
-# BOARD_PROVIDES_LIBRIL := true
+# RIL: libril propio en ril/libril (hardware/ril/Android.mk lo excluye con
+# esta variable; BOARD_PROVIDES_LIBRIL no existe en CM7)
+TARGET_PROVIDES_LIBRIL := true
 
 # Wi-Fi
 BOARD_WPA_SUPPLICANT_DRIVER := WEXT

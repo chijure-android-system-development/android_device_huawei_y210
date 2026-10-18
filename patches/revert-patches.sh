@@ -37,9 +37,6 @@ remove_new() {
 
 echo "=== Revirtiendo parches Y210 ==="
 
-# hardware/ril — working tree
-revert_wt hardware/ril hardware_ril.patch
-
 # hardware/libhardware_legacy — working tree
 revert_wt hardware/libhardware_legacy hardware_libhardware_legacy.patch
 
