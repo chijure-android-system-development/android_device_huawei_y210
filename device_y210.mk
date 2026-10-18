@@ -113,6 +113,7 @@ PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/system/wifi/ar6000.ko:system/wifi/ar6000.ko \
     device/huawei/y210/prebuilt/system/bin/wlan_detect:system/bin/wlan_detect \
     device/huawei/y210/prebuilt/system/bin/wlan_tool:system/bin/wlan_tool \
+    device/huawei/y210/prebuilt/system/bin/wlan_loader_y210.sh:system/bin/wlan_loader_y210.sh \
     device/huawei/y210/prebuilt/system/etc/init.qcom.wifi.sh:system/etc/init.qcom.wifi.sh \
     $(call find-copy-subdir-files,*,device/huawei/y210/prebuilt/system/wifi/ath6k,system/wifi/ath6k)
 

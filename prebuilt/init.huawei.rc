@@ -64,10 +64,28 @@ on boot
     chown bluetooth bluetooth /sys/devices/platform/msm_serial_hs.0/clock
     chmod 0660 /sys/devices/platform/msm_serial_hs.0/clock
 
+    # ar6000.ko escribe polling/detect_change de msm_sdcc.2 con filp_open y
+    # las credenciales de quien hace el insmod; wifi.c lo hace desde
+    # system_server. Lineas del init.qcom.rc stock (estaban en init.y210.rc,
+    # que ya no va al ramdisk) mas detect_change, como wlan_tool init.
+    chmod 0664 /sys/devices/platform/msm_sdcc.1/polling
+    chmod 0664 /sys/devices/platform/msm_sdcc.2/polling
+    chmod 0664 /sys/devices/platform/msm_sdcc.3/polling
+    chmod 0664 /sys/devices/platform/msm_sdcc.4/polling
+    chown system system /sys/devices/platform/msm_sdcc.1/polling
+    chown system system /sys/devices/platform/msm_sdcc.2/polling
+    chown system system /sys/devices/platform/msm_sdcc.3/polling
+    chown system system /sys/devices/platform/msm_sdcc.4/polling
+    chown system system /sys/devices/platform/msm_sdcc.2/detect_change
+
     # Create the directories used by the Wireless subsystem
     mkdir /data/misc/wifi 0770 wifi wifi
     mkdir /data/misc/wifi/sockets 0775 wifi wifi
     mkdir /data/misc/wpa_supplicant 0775 wifi wifi
+    # wifi.c (libhardware_legacy) busca el socket de control en
+    # /data/system/wpa_supplicant/<iface>; ath_supplicant lo crea donde dice
+    # ctrl_interface (/data/misc/wpa_supplicant).
+    symlink /data/misc/wpa_supplicant /data/system/wpa_supplicant
     mkdir /data/misc/wifi/wpa_supplicant 0770 wifi wifi
     mkdir /data/misc/wifi/load 0775 system system
     mkdir /data/misc/wifi/bin 0775 system system
@@ -602,18 +620,19 @@ service wlan_detect /system/bin/wlan_detect
 
 #/* < DTS2011121504967 wanghao 20111215 begin */
 #/* < DTS2011100803980 wanghao 20111008 begin */
-service wpa_supplicant /system/bin/wpa_supplicant \
-    -Dwext -ieth0 -c/data/misc/wifi/wpa_supplicant.conf \
-    -puse_p2p_group_interface=0
-    class main
-    socket wpa_eth0 dgram 660 wifi wifi
+# wifi.c arranca el servicio "wpa_supplicant"; en el Y210 es ath_supplicant
+# (stock, -Dar6003), como el servicio ath_supplicant del rc original.
+service wpa_supplicant /system/bin/ath_supplicant -Dar6003 -ieth0 -W -c/data/misc/wifi/wpa_supplicant.conf
     disabled
     oneshot
-# /* < DTS2012011805648 limeng 20120203 begin */
-service ath_supplicant /system/bin/ath_supplicant -Dar6003 -ieth0 -W -c/data/misc/wifi/wpa_supplicant.conf
+
+# WIFI_FIRMWARE_LOADER: wifi.c ya hizo insmod de ar6000.ko; esto completa lo
+# que hacia wlan_tool loaddriver y pone wlan.driver.status=ok.
+service wlan_loader /system/bin/sh /system/bin/wlan_loader_y210.sh
+    user root
+    group wifi system net_admin inet
     disabled
     oneshot
-# /* DTS2012011805648 limeng 20120203 end > */
 #/* < DTS2012030506477 huangpei 20120326 begin */
 service dhcpcd_eth0 /system/bin/dhcpcd -BKL 
     disabled 

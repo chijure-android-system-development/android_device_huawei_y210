@@ -80,10 +80,13 @@ TARGET_PROVIDES_LIBRIL := true
 BOARD_WPA_SUPPLICANT_DRIVER := WEXT
 BOARD_WLAN_DEVICE           := ar6000
 WIFI_DRIVER_MODULE_PATH     := /system/wifi/ar6000.ko
-WIFI_DRIVER_MODULE_ARG      := ""
+# Mismos argumentos que wlan_tool loaddriver (wlan.driver.args por defecto)
+WIFI_DRIVER_MODULE_ARG      := "targetconf=default devmode=sta submode=none ifname=eth0"
 WIFI_DRIVER_MODULE_NAME     := ar6000
 WPA_SUPPLICANT_VERSION      := VER_0_6_X
 WIFI_PRE_LOADER             := wlan_detect
+# Servicio del rc que espera al firmware, levanta eth0 y pone wlan.driver.status=ok
+WIFI_FIRMWARE_LOADER        := wlan_loader
 
 # Partition sizes from device /proc/mtd (bytes)
 BOARD_BOOTIMAGE_PARTITION_SIZE := 0x00500000

@@ -241,3 +241,52 @@ Validación:
 `Y210-0151V100R001C40B851`) solo reinició Android y `fastboot devices` no
 mostró el equipo. Es el bootloader de Huawei. Entrar a fastboot a mano y
 comprobar con `fastboot devices` antes de `fastboot flash`.
+
+## Sin parchear libhardware_legacy (2026-10-18)
+
+`hardware_libhardware_legacy.patch` se retiró. El `wifi.c` de CM7 hace lo
+mismo con sus hooks y el rc del device tree:
+
+- `insmod`: `wifi.c` carga `/system/wifi/ar6000.ko` con
+  `WIFI_DRIVER_MODULE_ARG := "targetconf=default devmode=sta submode=none
+  ifname=eth0"` (los argumentos por defecto de `wlan_tool loaddriver`).
+- `WIFI_FIRMWARE_LOADER := wlan_loader`: servicio del rc que corre
+  `wlan_loader_y210.sh`; espera a que `wmiconfig -i eth0 --getRTS` responda,
+  hace `ifconfig eth0 up` y pone `wlan.driver.status=ok`. Es lo que hacía
+  `wlan_tool loaddriver` después del insmod; con eso el supplicant ya no
+  arranca antes de que exista `eth0`.
+- unload: `rmmod ar6000` de `wifi.c`, igual que `wlan_tool unloaddriver` con
+  `CLK_HELPER=0`.
+- supplicant: el servicio `wpa_supplicant` del rc ejecuta `ath_supplicant`
+  (antes había un `wpa_supplicant -Dwext` que no se usaba y un servicio
+  `ath_supplicant` aparte).
+- socket: `symlink /data/misc/wpa_supplicant /data/system/wpa_supplicant`
+  (la ruta que usa `wifi.c`); no hace falta tocar el `wpa_supplicant.conf`
+  guardado en `/data`.
+
+**Causa real de por qué el parche desviaba el insmod a `wlan_tool`:**
+`ar6000.ko` escribe `/sys/devices/platform/msm_sdcc.2/polling` y
+`detect_change` con `android_readwrite_file()` (`filp_open` desde el kernel,
+con las credenciales del proceso que hace el insmod) para que el host SDIO
+detecte el chip. Desde `system_server` (uid system) la escritura fallaba en
+silencio: nunca aparecía `mmc1: new high speed SDIO card`, no había `eth0`,
+`wifi.c` hacía timeout y el `rmmod` de un driver a medio inicializar reiniciaba
+el teléfono cada 1-2 minutos. El stock lo resuelve con `chown system system`
+de los `polling` (líneas del init.qcom.rc stock que estaban en
+`init.y210.rc`, que ya no va al ramdisk); ahora están en `init.huawei.rc`,
+más `detect_change` como hacía `wlan_tool init`.
+
+Validado: 3 ciclos `svc wifi disable/enable` (módulo descargado, `ok` en ~2 s,
+escaneo con APs), arranque con Wi-Fi encendido que reconecta a la red
+guardada con DHCP, ping a gateway e internet, sin reinicios ni tombstones.
+Logs esperados:
+
+```
+I/wlan_loader: ar6000 listo en eth0
+V/WifiStateTracker: Connection to supplicant established, state=INACTIVE
+kernel: mmc1: new high speed SDIO card at address 0001
+```
+
+El primer `Unable to open connection to supplicant on
+"/data/system/wpa_supplicant/eth0"` es normal: el supplicant todavía no creó
+su socket y `WifiMonitor` reintenta.

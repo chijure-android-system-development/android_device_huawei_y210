@@ -39,8 +39,9 @@ run_all() {
 # hardware/ril — ya no se parchea: libril propio en ril/libril
 #                (TARGET_PROVIDES_LIBRIL) y desfase v6 en ril/rilshim.
 
-# hardware/libhardware_legacy — wifi.c: soporte ath6k/AR6003 completo
-apply hardware/libhardware_legacy     hardware_libhardware_legacy.patch
+# hardware/libhardware_legacy — ya no se parchea: wifi.c de CM7 con
+#   WIFI_DRIVER_MODULE_ARG + WIFI_FIRMWARE_LOADER (wlan_loader_y210.sh) y el
+#   servicio wpa_supplicant -> ath_supplicant en init.huawei.rc.
 
 # frameworks/base — cámara: CameraParameters (HFR/denoise/redeye/YV12),
 #                   StagefrightRecorder, CameraService (pmem_adsp restart),
