@@ -173,6 +173,17 @@ case "$target" in
         # de UI cuando el buffer sucio finalmente se descarga a NAND lenta.
         echo 10 > /proc/sys/vm/dirty_ratio
         echo 5 > /proc/sys/vm/dirty_background_ratio
+
+        # zram: swap comprimida en RAM (LZO, ~3.5x). Bajo presion evito los
+        # kills del LMK y conserva cache de archivos. 48 MB: con la carga
+        # mas pesada medida se usaron 16.5 MB. Solo con un kernel que tenga
+        # CONFIG_ZRAM/CONFIG_SWAP (el stock no); con el stock no hace nada.
+        if [ -e /sys/block/zram0/disksize ] && [ -e /proc/swaps ] &&
+           [ "`cat /sys/block/zram0/disksize`" = "0" ]; then
+            echo $((48 * 1024 * 1024)) > /sys/block/zram0/disksize
+            mkswap /dev/block/zram0 > /dev/null
+            swapon /dev/block/zram0
+        fi
         ;;
 esac
 

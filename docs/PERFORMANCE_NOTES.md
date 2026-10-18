@@ -189,3 +189,35 @@ RENDER_NOTES.md.
 PAN de Bluetooth de la instancia anterior, `pan start` devuelve EBUSY y
 `BluetoothNetworkService.onBluetoothEnable()` no captura la
 `IllegalStateException`. En un boot normal no ocurre.
+
+## zram de 48 MB (2026-10-18)
+
+Requiere un kernel con `CONFIG_SWAP` y `CONFIG_ZRAM` (el zImage stock de
+Huawei no los tiene; el `y210_defconfig` de
+github.com/chijure/android_kernel_huawei_y210 sí). `init.qcom.post_boot.sh`
+lo activa solo si existe `/sys/block/zram0` y todavía no tiene tamaño, así
+que con el kernel stock no hace nada.
+
+Prueba de presión (`bench_heavy.sh`: navegador con 3 páginas, cámara,
+galería y 9 apps más; reinicio limpio en cada pasada, pantalla forzada
+encendida y apps lanzadas con `-a MAIN -c LAUNCHER`):
+
+| | sin zram | zram 48 MB |
+|---|---|---|
+| kills del LMK | 3 | 0 |
+| apps vivas al final | 12/12 | 12/12 |
+| cache de archivos al final | 21 MB | 27 MB |
+| swap usada | — | 16.5 MB (~5 MB de RAM real, LZO ~3.5x) |
+| arranque en frío (promedio 9 apps) | ~759 ms | ~772 ms |
+| crashes / tombstones | 0 / 0 | 0 / 0 |
+
+Sin presión (8 apps livianas) no hay diferencia medible. 48 MB alcanza con
+margen; un tamaño mayor no cambia nada porque zram solo ocupa lo que
+comprime. Swappiness y LMK quedan como estaban.
+
+Validación: `adb shell cat /proc/swaps` → `/dev/block/zram0 partition 49148`.
+
+Cuidado al medir apertura de apps con `am start -W`: con la pantalla apagada
+`TotalTime` sale en decenas de segundos (GB no da la actividad por mostrada
+hasta que enciende), y sin `-a android.intent.action.MAIN` Contactos tira
+un NPE en `DialtactsActivity.onCreate` (`intent.getAction()`).
