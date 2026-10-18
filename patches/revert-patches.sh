@@ -58,7 +58,6 @@ revert_wt packages/apps/FM packages_apps_FM.patch
 
 
 # vendor/cyanogen — working tree + archivo nuevo
-revert_wt vendor/cyanogen vendor_cyanogen.patch
 remove_new vendor/cyanogen/products/cyanogen_y210.mk
 
 echo "=== Parches Y210 revertidos ==="

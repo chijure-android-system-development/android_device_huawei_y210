@@ -117,10 +117,9 @@ apply packages/apps/FM                packages_apps_FM.patch
 # packages/apps/Settings — ya no se parchea: el fallback a gsm.operator.numeric
 # tapaba la SIM en UNKNOWN, resuelto por ril/rilshim (ver docs/RIL_NOTES.md).
 
-# vendor/cyanogen — APN Claro Perú (recortado: se saco un hunk que borraba
-# ~60 entradas de products/AndroidProducts.mk y rompia breakfast/lunch de
-# otros dispositivos del arbol sin dar ningun beneficio a y210)
-apply vendor/cyanogen                 vendor_cyanogen.patch
+# vendor/cyanogen — APN Claro Perú: ya no se parchea apns-conf.xml; va en
+#   overlay/frameworks/base/core/res/res/xml/apns.xml (TelephonyProvider lo
+#   carga junto con /system/etc/apns-conf.xml).
 copy_new vendor_cyanogen_y210.mk      vendor/cyanogen/products/cyanogen_y210.mk
 }
 
