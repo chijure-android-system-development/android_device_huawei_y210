@@ -162,10 +162,10 @@ init() {
     do_setprop $APMODE_PROP_NAME "unloaded"
     mkdir /data/misc/wifi/wpa_supplicant
     mkdir /data/misc/wifi/hostapd
-    mkdir /data/system/wpa_supplicant /data/system/hostapd  
+    mkdir /data/system/hostapd
     chmod 770 /data/misc/wifi/wpa_supplicant /data/misc/wifi/hostapd
     chown wifi.wifi /data/misc/wifi/wpa_supplicant /data/misc/wifi/hostapd
-    chown wifi.wifi /data/system/wpa_supplicant /data/system/hostapd
+    chown wifi.wifi /data/system/hostapd
     chown system.system /sys/devices/platform/msm_sdcc.1/detect_change
     chown system.system /sys/devices/platform/msm_sdcc.2/detect_change
     if exp $CLK_HELPER == 1; then
