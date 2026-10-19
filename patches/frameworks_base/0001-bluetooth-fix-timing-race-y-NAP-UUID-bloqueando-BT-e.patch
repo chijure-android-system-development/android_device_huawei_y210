@@ -1,0 +1,158 @@
+From 621bc891506e4929c1b50da7b9d182a6bf212122 Mon Sep 17 00:00:00 2001
+From: Jhuan Reategui Solis <reateguisolisjm@gmail.com>
+Date: Mon, 1 Jun 2026 22:59:23 -0500
+Subject: [PATCH 1/4] bluetooth: fix timing race y NAP UUID bloqueando BT
+ enable en Y210
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BluetoothEventLoop: reintentar en org.bluez.Error.NoSuchAdapter
+  bluetoothd se registra en D-Bus antes de que hciattach complete;
+  hci0 aparece milisegundos después. Sin este retry, el EventLoop
+  desistía al primer NoSuchAdapter y apagaba el stack completo.
+
+BluetoothService: NAP UUID condicional en mAdapterUuids
+  setBluetoothTetheringNative falla en BlueZ 4.93 (sin NetworkServer).
+  Al añadir NAP incondicionalmente a mAdapterUuids, la comprobación
+  containsAllUuids nunca se cumplía y SERVICE_RECORD_LOADED nunca
+  se enviaba, expirando PREPARE_BLUETOOTH_TIMEOUT con "SDP failed".
+
+HuaweiQualcommRIL: nueva clase para Y210 (extiende HuaweiRIL de CM9)
+  QualcommNoSimReadyRIL no existe en CM9; HuaweiRIL ya provee
+  responseIccCardStatus, getIMSI e iccIO actualizados para ICS.
+  Solo se sobreescriben queryFacilityLock y setFacilityLock para
+  pasar mAid real en vez de null.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Change-Id: I4a478baea4a20269bbb8a0005b29101274a39b09
+---
+ .../java/android/server/BluetoothService.java |  9 ++-
+ .../jni/android_server_BluetoothEventLoop.cpp |  6 ++
+ .../internal/telephony/HuaweiQualcommRIL.java | 72 +++++++++++++++++++
+ 3 files changed, 85 insertions(+), 2 deletions(-)
+ create mode 100644 telephony/java/com/android/internal/telephony/HuaweiQualcommRIL.java
+
+diff --git a/core/java/android/server/BluetoothService.java b/core/java/android/server/BluetoothService.java
+index d1283bab220..185e633931a 100755
+--- a/core/java/android/server/BluetoothService.java
++++ b/core/java/android/server/BluetoothService.java
+@@ -570,13 +570,18 @@ public class BluetoothService extends IBluetooth.Stub {
+         addReservedSdpRecords(uuids);
+ 
+         // Enable profiles maintained by Bluez userspace.
+-        setBluetoothTetheringNative(true, BluetoothPanProfileHandler.NAP_ROLE,
++        // On some devices (e.g. Y210 with BlueZ 4.93) NetworkServer is not available.
++        // Only add NAP to expected UUIDs if tethering registration succeeds.
++        boolean tetheringEnabled = setBluetoothTetheringNative(true,
++                BluetoothPanProfileHandler.NAP_ROLE,
+                 BluetoothPanProfileHandler.NAP_BRIDGE);
+ 
+         // Add SDP records for profiles maintained by Bluez userspace
+         uuids.add(BluetoothUuid.AudioSource);
+         uuids.add(BluetoothUuid.AvrcpTarget);
+-        uuids.add(BluetoothUuid.NAP);
++        if (tetheringEnabled) {
++            uuids.add(BluetoothUuid.NAP);
++        }
+ 
+         // Cannot cast uuids.toArray directly since ParcelUuid is parcelable
+         mAdapterUuids = new ParcelUuid[uuids.size()];
+diff --git a/core/jni/android_server_BluetoothEventLoop.cpp b/core/jni/android_server_BluetoothEventLoop.cpp
+index 192e1e36d13..b8d2ac3616a 100644
+--- a/core/jni/android_server_BluetoothEventLoop.cpp
++++ b/core/jni/android_server_BluetoothEventLoop.cpp
+@@ -344,6 +344,12 @@ const char * get_adapter_path(DBusConnection *conn) {
+                     LOG_AND_FREE_DBUS_ERROR(&err);
+                     usleep(10000);  // 10 ms
+                     continue;
++                } else if (dbus_error_has_name(&err,
++                    "org.bluez.Error.NoSuchAdapter")) {
++                    // bluetoothd up but hci0 not yet registered, retry
++                    LOG_AND_FREE_DBUS_ERROR(&err);
++                    usleep(10000);  // 10 ms
++                    continue;
+                 } else {
+                     // Some other error we weren't expecting
+                     LOG_AND_FREE_DBUS_ERROR(&err);
+diff --git a/telephony/java/com/android/internal/telephony/HuaweiQualcommRIL.java b/telephony/java/com/android/internal/telephony/HuaweiQualcommRIL.java
+new file mode 100644
+index 00000000000..8c192b98afb
+--- /dev/null
++++ b/telephony/java/com/android/internal/telephony/HuaweiQualcommRIL.java
+@@ -0,0 +1,72 @@
++/*
++ * Copyright (C) 2011 The CyanogenMod Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.android.internal.telephony;
++
++import static com.android.internal.telephony.RILConstants.*;
++
++import android.content.Context;
++import android.os.Message;
++
++/**
++ * Custom Qualcomm RIL for Huawei devices.
++ * Extends HuaweiRIL (CM9 base) and passes mAid in facility-lock requests.
++ * {@hide}
++ */
++public class HuaweiQualcommRIL extends HuaweiRIL {
++
++    public HuaweiQualcommRIL(Context context, int networkMode, int cdmaSubscription) {
++        super(context, networkMode, cdmaSubscription);
++    }
++
++    @Override
++    public void
++    queryFacilityLock(String facility, String password, int serviceClass,
++                      Message response) {
++        RILRequest rr = RILRequest.obtain(RIL_REQUEST_QUERY_FACILITY_LOCK, response);
++
++        if (RILJ_LOGD) riljLog(rr.serialString() + "> " + requestToString(rr.mRequest)
++                    + " aid: " + mAid + " facility: " + facility);
++
++        rr.mp.writeInt(4);
++        rr.mp.writeString(facility);
++        rr.mp.writeString(password);
++        rr.mp.writeString(Integer.toString(serviceClass));
++        rr.mp.writeString(mAid);
++
++        send(rr);
++    }
++
++    @Override
++    public void
++    setFacilityLock(String facility, boolean lockState, String password,
++                    int serviceClass, Message response) {
++        RILRequest rr = RILRequest.obtain(RIL_REQUEST_SET_FACILITY_LOCK, response);
++
++        if (RILJ_LOGD) riljLog(rr.serialString() + "> " + requestToString(rr.mRequest)
++                    + " aid: " + mAid + " facility: " + facility
++                    + " lockstate: " + lockState);
++
++        rr.mp.writeInt(5);
++        rr.mp.writeString(facility);
++        rr.mp.writeString(lockState ? "1" : "0");
++        rr.mp.writeString(password);
++        rr.mp.writeString(Integer.toString(serviceClass));
++        rr.mp.writeString(mAid);
++
++        send(rr);
++    }
++}
+-- 
+2.43.0
+

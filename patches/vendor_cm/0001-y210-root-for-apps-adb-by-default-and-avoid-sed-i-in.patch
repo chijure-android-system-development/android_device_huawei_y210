@@ -1,0 +1,58 @@
+From 6a067feeb7d673c1c1e97f8b3e5ea67678616a14 Mon Sep 17 00:00:00 2001
+From: Juan Manuel Reategui Solis <reateguisolisjm@gmail.com>
+Date: Sun, 18 Oct 2026 23:04:53 -0500
+Subject: [PATCH 1/2] y210: root for apps/adb by default and avoid sed -i in
+ squisher
+
+Enable persist.sys.root_access=3 and restart adbd as root on userdebug.
+squisher rewrites build.prop through a temp file instead of sed -i
+(unreliable on Docker Desktop shared folders).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Change-Id: I74ef594e8a2951d52f04cee8a5e423695d186e22
+---
+ prebuilt/common/etc/init.local.rc | 5 +++++
+ tools/squisher                    | 5 +++--
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/prebuilt/common/etc/init.local.rc b/prebuilt/common/etc/init.local.rc
+index 2a31cc33..cb35fb58 100644
+--- a/prebuilt/common/etc/init.local.rc
++++ b/prebuilt/common/etc/init.local.rc
+@@ -9,10 +9,15 @@ on post-fs-data
+     mkdir /cache/dalvik-cache 0771 system system
+     chown system system /cache/dalvik-cache
+     chmod 0771 /cache/dalvik-cache
++    # Enable root for both apps and ADB by default.
++    # CM gate is enforced in adbd and su via persist.sys.root_access.
++    setprop persist.sys.root_access 3
+ 
+ on boot
+     chown system system /sys/block/mmcblk0/queue/scheduler
+     chmod 0664 /sys/block/mmcblk0/queue/scheduler
++    # Restart adbd as root (works on userdebug builds with ro.debuggable=1).
++    setprop service.adb.root 1
+ 
+ # allow system to modify ksm control files
+     chown root system /sys/kernel/mm/ksm/pages_to_scan
+diff --git a/tools/squisher b/tools/squisher
+index 552929ff..628d22d2 100755
+--- a/tools/squisher
++++ b/tools/squisher
+@@ -60,10 +60,11 @@ find ./ -name \*.apk | $XARGS $OPTICHARGER
+ )
+ 
+ # Fix build.prop
+-$SED -i \
++$SED \
+ 	-e '/ro\.kernel\.android\.checkjni/d' \
+ 	-e '/ro\.build\.type/s/eng/user/' \
+-	$REPACK/ota/system/build.prop
++	$REPACK/ota/system/build.prop > $REPACK/ota/system/build.prop.tmp
++mv $REPACK/ota/system/build.prop.tmp $REPACK/ota/system/build.prop
+ 
+ 
+ # Delete unnecessary binaries
+-- 
+2.43.0
+

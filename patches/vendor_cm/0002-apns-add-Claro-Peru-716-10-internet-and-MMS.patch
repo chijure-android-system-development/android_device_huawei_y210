@@ -1,0 +1,31 @@
+From 7a5193f95a6a0ac09ed69c5e20096d6c9b9c5ebb Mon Sep 17 00:00:00 2001
+From: Juan Manuel Reategui Solis <reateguisolisjm@gmail.com>
+Date: Sun, 18 Oct 2026 23:04:54 -0500
+Subject: [PATCH 2/2] apns: add Claro Peru (716/10) internet and MMS
+
+There were no MCC 716 entries, so the Y210 only had a stale APN without
+credentials and mobile data never came up. Claro PE uses PAP with
+claro/claro.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Change-Id: I6b1dd57997bbc7ab14f7ac0c421342b05227a8ac
+---
+ prebuilt/common/etc/apns-conf.xml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/prebuilt/common/etc/apns-conf.xml b/prebuilt/common/etc/apns-conf.xml
+index a4b928a3..8058e260 100644
+--- a/prebuilt/common/etc/apns-conf.xml
++++ b/prebuilt/common/etc/apns-conf.xml
+@@ -1309,6 +1309,8 @@
+   <apn carrier="Movistar SV MMS" mcc="706" mnc="040" apn="mms.movistar.sv" user="movistarsv" password="movistarsv" mmsc="http://mms.movistar.sv" mmsproxy="10.12.20.1" mmsport="80" type="mms" />
+   <apn carrier="Cable and Wireless Panama" mcc="714" mnc="01" apn="apn01.cwpanama.com.pa" type="default,supl" />
+   <apn carrier="Cable and Wireless Panama MMS" mcc="714" mnc="01" apn="apn02.cwpanama.com.pa" mmsc="http://mms.zonamovil.com.pa:80/i.bin" mmsproxy="172.25.3.5" mmsport="8080" type="mms" />
++  <apn carrier="Claro PE" mcc="716" mnc="10" apn="claro.pe" user="claro" password="claro" authtype="1" type="default,supl" />
++  <apn carrier="Claro PE MMS" mcc="716" mnc="10" apn="mms.claro.pe" user="claro" password="claro" mmsc="http://claro/servlets/mms" mmsproxy="192.168.231.30" mmsport="80" authtype="1" type="mms" />
+   <apn carrier="Movistar AG" mcc="722" mnc="007" apn="internet.unifon" user="wap" password="password" type="default,supl" />
+   <apn carrier="Movistar AG MMS" mcc="722" mnc="007" apn="mms.gprs.unifon.com.ar" user="mms" password="mms" mmsc="http://mms.tmovil.cl/" mmsproxy="200.068.032.239" mmsport="9201" type="mms" />
+   <apn carrier="Movistar AR" mcc="722" mnc="07" apn="wap.gprs.unifon.com.ar" proxy="200.5.86.10" port="80" user="wap" password="wap" authenticationtype="PAP" type="defaul,supl" />
+-- 
+2.43.0
+
