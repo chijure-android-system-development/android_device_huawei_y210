@@ -207,7 +207,7 @@ ro.config.hw_GSensorOptimize=true
 # DTS2011032202087 s00159653 20110322 end
 
 # <DTS2010111202622 mengxiaokun00172620 20101112 begin
-ro.config.hw_proximity=true
+ro.config.hw_proximity=false
 # DTS2010111202622 mengxiaokun00172620 20101112 end>
 
 # DTS2011030204519 s00159653 20110310 Begin
@@ -403,3 +403,7 @@ persist.camera.mode=1
 # into the vendor HAL. Without this, preview commonly fails with
 # `registerBuffers failed -19 / invalid heap`.
 persist.camera.delegate_setparams=1
+
+# zram: 18% of RAM (~30MB) as compressed swap, applied by CM handle_compcache.
+# ICS on ~170MB usable RAM sits in lowMemory almost all the time without it.
+ro.zram.default=18
