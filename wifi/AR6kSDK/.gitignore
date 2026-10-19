@@ -1,0 +1,8 @@
+# kbuild output from wifi/Android.mk / build_ar6000.sh
+*.o
+*.ko
+*.mod.c
+.*.cmd
+.tmp_versions/
+modules.order
+Module.symvers

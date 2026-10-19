@@ -84,7 +84,10 @@ on boot
     mkdir /data/misc/wpa_supplicant 0775 wifi wifi
     # wifi.c (libhardware_legacy) busca el socket de control en
     # /data/system/wpa_supplicant/<iface>; ath_supplicant lo crea donde dice
-    # ctrl_interface (/data/misc/wpa_supplicant).
+    # ctrl_interface (/data/misc/wpa_supplicant). /data/system must exist
+    # first: on a freshly wiped /data it is only created further down, and
+    # the symlink failed silently (WiFi never connected after a wipe).
+    mkdir /data/system 0775 system system
     symlink /data/misc/wpa_supplicant /data/system/wpa_supplicant
     mkdir /data/misc/wifi/wpa_supplicant 0770 wifi wifi
     mkdir /data/misc/wifi/load 0775 system system

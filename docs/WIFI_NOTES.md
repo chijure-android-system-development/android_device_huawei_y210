@@ -341,7 +341,7 @@ suspensión: no hay WoW ni reinicialización, el chip queda en su power-save
 802.11. Validado: 321 s de suspensión continua, 0 fallidas, sin CMD5 en el
 resume, Wi-Fi `COMPLETED` con la misma IP y ping OK al despertar sin off/on.
 
-## Pendiente: `ar6000.ko` desde fuente (hecho en CM9, 2026-10-19)
+## `ar6000.ko` desde fuente (2026-10-19)
 
 El blob `prebuilt/system/wifi/ar6000.ko` es el SDK público de Atheros:
 `description=... version 3.1.1.776`, rutas de compilación
@@ -370,10 +370,23 @@ azar en cada arranque), 16 min sin cortes (el corte cada ~5 min por `cscan`
 rechazado -> `DRIVER HANGED` no aparece), 9 ciclos de suspensión en WoW sin
 desconexión y sin `CMD5`.
 
-Para portarlo a CM7: mismo kernel 2.6.38 (mismo `vermagic`), mismo blob y
-mismo firmware, así que debería compilar casi igual. Diferencias a revisar:
-CM7 pasa `WIFI_DRIVER_MODULE_ARG` (`ifname=eth0` etc., compatible) y usa
-`ath_supplicant`; el fix de suspensión de esta sección (relojes del slot sin
-WoW) puede convivir o volverse innecesario con el driver de fuente. Falta
-también `ar6000_cal_powerTuned` de Huawei (ajuste de potencia TX desde
+Portado a CM7 (2026-10-19): `wifi/AR6kSDK` es el mismo código que en CM9 y
+`wifi/build_ar6000.sh` lo compila en el host contra el kernel del device tree
+(`~/android_kernel_huawei_y210` + `~/kernel-out-y210`, commit `968abe96`, md5
+del zImage igual al de `device/huawei/y210/kernel`) y deja el resultado en
+`prebuilt/system/wifi/ar6000.ko`, igual que el zImage prebuilt. Al cambiar el
+kernel hay que volver a correrlo. Acepta los argumentos de
+`WIFI_DRIVER_MODULE_ARG` (`targetconf`, `devmode`, `submode`, `ifname`).
+
+Validado en CM7: carga y conecta con `ath_supplicant`, 16 min (32 muestras)
+sin cortes ni eventos `HANGED`/recarga, y 3 ciclos de suspensión sin cable
+sin desconexión ni `CMD5`. Con el kernel `968abe96` el slot no se suspende
+(solo relojes), así que el driver no entra en WoW; eso sigue funcionando.
+Falta `ar6000_cal_powerTuned` de Huawei (ajuste de potencia TX desde
 `/data/misc/wifi/Cal_powerTuned_pa.bin`), que RC.734 no trae.
+
+Bug encontrado en la prueba (no del driver): después de un wipe el Wi-Fi no
+conectaba (`Unable to open connection to supplicant on "eth0"`) porque
+`init.huawei.rc` creaba el symlink `/data/system/wpa_supplicant` antes del
+`mkdir /data/system`; con `/data` vacío el symlink fallaba en silencio.
+Corregido creando `/data/system` antes.
