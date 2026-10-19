@@ -1319,7 +1319,6 @@ static void receive_liveshot_callback(liveshot_status status, uint32_t jpeg_size
 static void receive_camstats_callback(camstats_type stype, camera_preview_histogram_info* histinfo);
 static void receive_camframe_video_callback(struct msm_frame *frame); // 720p
 static int8_t receive_event_callback(mm_camera_event* event);
-static void receive_jpeg_event_callback_debug(uint32_t status); /* Y210-DEBUG */
 static void receive_shutter_callback(common_crop_t *crop);
 static void receive_camframe_error_callback(camera_error_type err);
 static int fb_fd = -1;
@@ -2137,7 +2136,7 @@ bool QualcommCameraHardware::startCamera()
     mCamNotify.camstats_cb = &receive_camstats_callback;
 
     mCamNotify.on_event =  &receive_event_callback;
-    mCamNotify.on_jpeg_event = &receive_jpeg_event_callback_debug; /* Y210-DEBUG */
+    mCamNotify.on_jpeg_event = NULL; /* liboemcamera never uses it */
 
     mCamNotify.on_error_event = &receive_camframe_error_callback;
 
@@ -2639,11 +2638,8 @@ bool QualcommCameraHardware::initImageEncodeParameters(int size)
         mEncodeOutputBuffer[i].offset = 0;
     }
     mImageEncodeParms.p_output_buffer = mEncodeOutputBuffer;
-    /* Y210-DEBUG fix: buffer_count is never set anywhere else in this file —
-     * left at 0 from the memset above. p_output_buffer is an array of `size`
-     * entries (just populated above); telling the blob it has 0 output
-     * buffers is a very plausible reason the HW JPEG encoder configures but
-     * never signals completion (JPEG_ENC_DONE never fires). */
+    /* buffer_count was never set in the reference source (0 from the memset
+     * above) although p_output_buffer holds `size` entries. */
     mImageEncodeParms.buffer_count = size;
     mImageEncodeParms.exif_data = exif_data;
     mImageEncodeParms.exif_numEntries = exif_table_numEntries;
@@ -5721,26 +5717,8 @@ void QualcommCameraHardware::runSnapshotThread(void *data)
                          NULL);
     } else if(mSnapshotFormat == PICTURE_FORMAT_JPEG){
         if(!mZslEnable || mZslFlashEnable){
-            ALOGE("Y210-DEBUG: capture_params: pw=%u ph=%u postw=%u posth=%u thumbw=%u thumbh=%u ncap=%d",
-                 mImageCaptureParms.picture_width, mImageCaptureParms.picture_height,
-                 mImageCaptureParms.postview_width, mImageCaptureParms.postview_height,
-                 mImageCaptureParms.thumbnail_width, mImageCaptureParms.thumbnail_height,
-                 mImageCaptureParms.num_captures);
-            ALOGE("Y210-DEBUG: encode_params: exif_data=%p exif_n=%d p_out_buf=%p buf_cnt=%u rot=%u qual=%u yoff=%d cbcroff=%d encBM=%u outw=%u outh=%u fmt3d=%d",
-                 mImageEncodeParms.exif_data, mImageEncodeParms.exif_numEntries,
-                 mImageEncodeParms.p_output_buffer, mImageEncodeParms.buffer_count,
-                 mImageEncodeParms.rotation, mImageEncodeParms.quality,
-                 mImageEncodeParms.y_offset, mImageEncodeParms.cbcr_offset,
-                 mImageEncodeParms.encodeBitMask, mImageEncodeParms.output_picture_width,
-                 mImageEncodeParms.output_picture_height, mImageEncodeParms.format3d);
-            if (mImageEncodeParms.p_output_buffer)
-                ALOGE("Y210-DEBUG: p_output_buffer contents: ptr=%p filled=%u size=%u fd=%d offset=%u",
-                     mImageEncodeParms.p_output_buffer->ptr, mImageEncodeParms.p_output_buffer->filled_size,
-                     mImageEncodeParms.p_output_buffer->size, mImageEncodeParms.p_output_buffer->fd,
-                     mImageEncodeParms.p_output_buffer->offset);
-            mm_camera_status_t Y210_dbg_ret = mCamOps.mm_camera_start(current_ops_type,(void *)&mImageCaptureParms,
+            mCamOps.mm_camera_start(current_ops_type,(void *)&mImageCaptureParms,
                  (void *)&mImageEncodeParms);
-            ALOGE("Y210-DEBUG: mm_camera_start returned %d", Y210_dbg_ret);
 /*            }else{
                 notifyShutter(TRUE);
                 initZslParameter();
@@ -7793,7 +7771,7 @@ void QualcommCameraHardware::receiveSoftwareJpeg()
         jpeg_destroy_compress(&cinfo);
     }
 
-    LOGI("Y210: software JPEG %dx%d stride %d quality %d rotation %d -> %s (%d bytes)",
+    ALOGI("Y210: software JPEG %dx%d stride %d quality %d rotation %d -> %s (%d bytes)",
          width, height, stride, quality, rotation, ok ? "ok" : "FAILED", (int) dest.used);
 
     numJpegReceived++;
@@ -9655,24 +9633,13 @@ static void receive_liveshot_callback(liveshot_status status, uint32_t jpeg_size
 }
 
 
-/* Y210-DEBUG: on_jpeg_event/jpegfragment_cb are never wired up anywhere in
- * this reference source (dead struct fields) — testing whether THIS build of
- * liboemcamera.so actually signals JPEG completion through here instead of
- * through on_event's JPEG_ENC_DONE (which we confirmed never arrives). */
-static void receive_jpeg_event_callback_debug(uint32_t status)
-{
-    ALOGE("Y210-DEBUG: on_jpeg_event ENTERED, status=%u", status);
-}
-
 static int8_t receive_event_callback(mm_camera_event* event)
 {
-    ALOGE("Y210-DEBUG: receive_event_callback ENTERED, event=%p", event);
     ALOGV("%s: E", __FUNCTION__);
     if(event == NULL) {
         ALOGE("%s: event is NULL!", __FUNCTION__);
         return FALSE;
     }
-    ALOGE("Y210-DEBUG: receive_event_callback event_type=%d", event->event_type);
     switch(event->event_type) {
         case SNAPSHOT_DONE:
         {
