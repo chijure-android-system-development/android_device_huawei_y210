@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- See Android.mk: this package exists only for LOCAL_OVERRIDES_PACKAGES. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.huawei.y210.overrides">
+    <application android:hasCode="false" />
+</manifest>

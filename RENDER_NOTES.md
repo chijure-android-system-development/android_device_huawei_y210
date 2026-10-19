@@ -16,10 +16,13 @@
 - `libgsl.so` reemplazado por el del LG e400 CM9 (mismo Adreno200, compatible)
 - `libsc-a2xx.so` añadido desde LG e400 CM9; sin este blob los drivers Adreno
   crashean al iniciar (`Library '/system/lib/libsc-a2xx.so' not found`)
-- `/dev/pmem_gpu0/1` añadidos al kernel (`board-msm7x27a.c`, 4 MB cada uno)
-- Permisos `pmem_gpu`: `0660 system graphics` en `ueventd.huawei.rc`
 - `kgsl_devinfo`: `gmem_hostbaseaddr = gpurev (200)`, `chip_id &= 0xffff0000`
-- ELF patches en blobs con `elf_add_needed.py` para añadir `libos_compat.so` como NEEDED
+
+Retirado el 2026-10-19 (validado: Adreno en SurfaceFlinger y apps, benchmark
+QApp igual que antes): `pmem_gpu0/1` (ningún blob los abre; la GPU usa KGSL),
+`libos_compat` y el parche que la enlazaba a SurfaceFlinger (el `libgsl.so` del
+e400 ya exporta los 88 `os_*` que piden los blobs), y el parche de `libEGL`
+`egl_cache` (era síntoma del `libgsl` viejo, cuyo `eglInitialize` fallaba).
 
 ### Ruta HW actual
 

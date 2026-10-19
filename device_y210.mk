@@ -44,8 +44,12 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     lights.y210 \
     gps.y210 \
-    FileManager \
-    libos_compat
+    FileManager
+
+# Drops CM's wallpapers/VideoEditor (~20MB, no room on system) via
+# LOCAL_OVERRIDES_PACKAGES (overrides/)
+PRODUCT_PACKAGES += \
+    Y210Overrides
 
 # Telephony — generic_no_telephony.mk (our base, see below) deliberately
 # omits these (it's meant for tablets); this is the same pair build/target/
