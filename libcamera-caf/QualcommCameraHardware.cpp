@@ -99,6 +99,11 @@ extern "C" {
 #if DLOPEN_LIBMMCAMERA
 #include <dlfcn.h>
 
+extern "C" {
+#include <jpeglib.h>
+#include <jerror.h>
+}
+
 #define NUM_YV12_FRAMES 1
 #define FOCUS_AREA_INIT "(-1000,-1000,1000,1000,1000)"
 
@@ -5935,6 +5940,7 @@ status_t QualcommCameraHardware::takePicture()
     mSnapshotCancelLock.unlock();
 
     numJpegReceived = 0;
+    mSoftwareJpegDelivered = false;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -7646,6 +7652,185 @@ void QualcommCameraHardware::receiveJpegPicture(status_t status, mm_camera_buffe
 
     LOGV("receiveJpegPicture: X callback done.");
 }
+/*
+ * Software JPEG for the Huawei Y210.
+ *
+ * liboemcamera.so delivers the snapshot (SNAPSHOT_DONE) but its hardware JPEG
+ * encoder never reports JPEG_ENC_DONE/JPEG_ENC_FAILED, so takePicture() hung
+ * forever in runSnapshotThread(). The main image is NV21 in mRawMapped[0]:
+ * encode it here with libjpeg, record the requested rotation as an EXIF
+ * Orientation tag (instead of rotating pixels) and deliver it exactly like
+ * receiveJpegPicture() does.
+ */
+namespace {
+
+struct JpegMemDest {
+    struct jpeg_destination_mgr pub;
+    uint8_t *buf;
+    size_t size;
+    size_t used;
+};
+
+void jpegMemInit(j_compress_ptr cinfo)
+{
+    JpegMemDest *dest = (JpegMemDest *) cinfo->dest;
+    dest->pub.next_output_byte = dest->buf;
+    dest->pub.free_in_buffer = dest->size;
+}
+
+boolean jpegMemEmpty(j_compress_ptr cinfo)
+{
+    JpegMemDest *dest = (JpegMemDest *) cinfo->dest;
+    size_t newSize = dest->size * 2;
+    uint8_t *grown = (uint8_t *) realloc(dest->buf, newSize);
+    if (grown == NULL) {
+        ERREXIT(cinfo, JERR_OUT_OF_MEMORY);
+    }
+    dest->pub.next_output_byte = grown + dest->size;
+    dest->pub.free_in_buffer = newSize - dest->size;
+    dest->buf = grown;
+    dest->size = newSize;
+    return TRUE;
+}
+
+void jpegMemTerm(j_compress_ptr cinfo)
+{
+    JpegMemDest *dest = (JpegMemDest *) cinfo->dest;
+    dest->used = dest->size - dest->pub.free_in_buffer;
+}
+
+/* EXIF APP1 with just IFD0/Orientation (big endian TIFF). */
+void writeExifOrientation(j_compress_ptr cinfo, int rotation)
+{
+    uint16_t orientation;
+    switch (rotation) {
+    case 90:  orientation = 6; break;
+    case 180: orientation = 3; break;
+    case 270: orientation = 8; break;
+    default:  orientation = 1; break;
+    }
+    const JOCTET exif[] = {
+        'E', 'x', 'i', 'f', 0, 0,
+        'M', 'M', 0, 0x2a, 0, 0, 0, 8,           /* TIFF header, IFD0 at 8 */
+        0, 1,                                    /* one entry */
+        0x01, 0x12, 0, 3, 0, 0, 0, 1,            /* Orientation, SHORT, 1 */
+        (JOCTET) (orientation >> 8), (JOCTET) orientation, 0, 0,
+        0, 0, 0, 0,                              /* no next IFD */
+    };
+    jpeg_write_marker(cinfo, JPEG_APP0 + 1, exif, sizeof(exif));
+}
+
+} // namespace
+
+void QualcommCameraHardware::receiveSoftwareJpeg()
+{
+    Mutex::Autolock cbLock(&mCallbackLock);
+
+    if (mSoftwareJpegDelivered) {
+        return;
+    }
+
+    int width = mPictureWidth;
+    int height = mPictureHeight;
+    int stride = width;
+    if (mPreviewFormat == CAMERA_YUV_420_NV21_ADRENO) {
+        stride = CEILING32(width);
+    }
+    const uint8_t *yuv = (mRawMapped[0] != NULL) ? (const uint8_t *) mRawMapped[0]->data : NULL;
+    int quality = mParameters.getInt("jpeg-quality");
+    if (quality <= 0 || quality > 100) {
+        quality = 85;
+    }
+    int rotation = mParameters.getInt("rotation");
+
+    JpegMemDest dest;
+    memset(&dest, 0, sizeof(dest));
+    bool ok = (yuv != NULL && width > 0 && height > 0);
+    if (ok) {
+        dest.size = width * height / 2 + 64 * 1024;
+        dest.buf = (uint8_t *) malloc(dest.size);
+        ok = (dest.buf != NULL);
+    }
+
+    if (ok) {
+        struct jpeg_compress_struct cinfo;
+        struct jpeg_error_mgr jerr;
+        cinfo.err = jpeg_std_error(&jerr);
+        jpeg_create_compress(&cinfo);
+
+        dest.pub.init_destination = jpegMemInit;
+        dest.pub.empty_output_buffer = jpegMemEmpty;
+        dest.pub.term_destination = jpegMemTerm;
+        cinfo.dest = &dest.pub;
+
+        cinfo.image_width = width;
+        cinfo.image_height = height;
+        cinfo.input_components = 3;
+        cinfo.in_color_space = JCS_YCbCr;
+        jpeg_set_defaults(&cinfo);
+        jpeg_set_quality(&cinfo, quality, TRUE);
+        jpeg_start_compress(&cinfo, TRUE);
+        writeExifOrientation(&cinfo, rotation);
+
+        /* NV21: Y plane, then interleaved V/U at half resolution. */
+        const uint8_t *vu = yuv + mCbCrOffsetRaw;
+        JSAMPLE *row = (JSAMPLE *) malloc(width * 3);
+        while (row != NULL && cinfo.next_scanline < cinfo.image_height) {
+            int y = cinfo.next_scanline;
+            const uint8_t *ys = yuv + y * stride;
+            const uint8_t *vus = vu + (y / 2) * stride;
+            for (int x = 0; x < width; x++) {
+                row[x * 3] = ys[x];
+                row[x * 3 + 1] = vus[(x & ~1) + 1];   /* Cb (U) */
+                row[x * 3 + 2] = vus[x & ~1];         /* Cr (V) */
+            }
+            JSAMPROW rows[1] = { row };
+            jpeg_write_scanlines(&cinfo, rows, 1);
+        }
+        ok = (row != NULL);
+        free(row);
+        jpeg_finish_compress(&cinfo);
+        jpeg_destroy_compress(&cinfo);
+    }
+
+    LOGI("Y210: software JPEG %dx%d stride %d quality %d rotation %d -> %s (%d bytes)",
+         width, height, stride, quality, rotation, ok ? "ok" : "FAILED", (int) dest.used);
+
+    numJpegReceived++;
+    if (mDataCallback && (mMsgEnabled & CAMERA_MSG_COMPRESSED_IMAGE)) {
+        camera_memory_t *jpeg = NULL;
+        if (ok && dest.used > 0) {
+            if (mJpegCopyMapped != NULL) {
+                mJpegCopyMapped->release(mJpegCopyMapped);
+            }
+            mJpegCopyMapped = mGetMemory(-1, dest.used, 1, mCallbackCookie);
+            if (mJpegCopyMapped != NULL) {
+                memcpy(mJpegCopyMapped->data, dest.buf, dest.used);
+                jpeg = mJpegCopyMapped;
+            }
+        }
+        /* NULL data tells the app the capture failed and it returns to preview. */
+        mDataCallback(CAMERA_MSG_COMPRESSED_IMAGE, jpeg, data_counter, NULL, mCallbackCookie);
+    }
+    free(dest.buf);
+    mSoftwareJpegDelivered = true;
+
+    if (numJpegReceived >= numCapture) {
+        mJpegThreadWaitLock.lock();
+        mJpegThreadRunning = false;
+        mJpegThreadWait.signal();
+        mJpegThreadWaitLock.unlock();
+    }
+
+    /* receiveRawPicture() normally ends snapshot mode, but it is never called
+     * in this flow; without this initPreview() waits forever when the app
+     * restarts the preview after the picture. */
+    mInSnapshotModeWaitLock.lock();
+    mInSnapshotMode = false;
+    mInSnapshotModeWait.signal();
+    mInSnapshotModeWaitLock.unlock();
+}
+
 bool QualcommCameraHardware::previewEnabled()
 {
     /* If overlay is used the message CAMERA_MSG_PREVIEW_FRAME would
@@ -9497,7 +9682,14 @@ static int8_t receive_event_callback(mm_camera_event* event)
 
                 obj->receiveRawPicture(NO_ERROR, event->event_data.yuv_frames[0], event->event_data.yuv_frames[0]);
             }
-*/        }
+*/
+            /* Y210: liboemcamera never signals JPEG_ENC_DONE/FAILED after the
+             * snapshot, so the main image (already in mRawMapped) is encoded
+             * in software here. */
+            if (obj != 0) {
+                obj->receiveSoftwareJpeg();
+            }
+        }
         break;
         case SNAPSHOT_FAILED:
         {
@@ -9512,7 +9704,7 @@ static int8_t receive_event_callback(mm_camera_event* event)
         case JPEG_ENC_DONE:
         {
             QualcommCameraHardware* obj = QualcommCameraHardware::getInstance();
-            if (obj != 0) {
+            if (obj != 0 && !obj->mSoftwareJpegDelivered) {
                 obj->receiveJpegPicture(NO_ERROR, event->event_data.encoded_frame);
             }
         }

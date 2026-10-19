@@ -23,9 +23,10 @@ LOCAL_C_INCLUDES += \
     frameworks/base/services/camera/libcameraservice \
     hardware/qcom/display/libgralloc \
     hardware/qcom/display/libgenlock \
-    hardware/qcom/media/libstagefrighthw
+    hardware/qcom/media/libstagefrighthw \
+    external/jpeg
 
-LOCAL_SHARED_LIBRARIES := libutils libui libcamera_client liblog libcutils libgenlock libbinder libdl libhardware
+LOCAL_SHARED_LIBRARIES := libutils libui libcamera_client liblog libcutils libgenlock libbinder libdl libhardware libjpeg
 
 LOCAL_CFLAGS += -include bionic/libc/kernel/common/linux/socket.h
 
