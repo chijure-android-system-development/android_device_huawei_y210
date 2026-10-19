@@ -340,3 +340,40 @@ slot Wi-Fi siempre deja la tarjeta y el driver intactos durante la
 suspensión: no hay WoW ni reinicialización, el chip queda en su power-save
 802.11. Validado: 321 s de suspensión continua, 0 fallidas, sin CMD5 en el
 resume, Wi-Fi `COMPLETED` con la misma IP y ping OK al despertar sin off/on.
+
+## Pendiente: `ar6000.ko` desde fuente (hecho en CM9, 2026-10-19)
+
+El blob `prebuilt/system/wifi/ar6000.ko` es el SDK público de Atheros:
+`description=... version 3.1.1.776`, rutas de compilación
+`.../system/wlan/atheros/AR6kSDK.build_3.1_RC.776/...` (Huawei U8685, no está
+stripped). 741 de sus 753 funciones existen con el mismo nombre en RC.734 de
+https://github.com/CyanogenMod/AR6kSDK.3.1. El intento de agosto usó
+`drivers/staging/ath6kl` del kernel, que es otra generación del driver: por
+eso se trababa en `BMI_EXECUTE`.
+
+En el árbol CM9 (`~/cm9/device/huawei/y210/wifi/`) ya funciona y está validado
+en el teléfono:
+
+- `wifi/AR6kSDK`: RC.734 con los cambios del Y210, todos copiados del blob
+  (detalle en `wifi/AR6kSDK/README.y210.md`): GPIO de encendido 6 sin
+  `gpio_request`/`gpio_free` (el board file lo reserva como `ATH_WLAN_REG`),
+  firmware plano en `/system/wifi/ath6k/` + `caldata.bin` como board data,
+  `eth0` por defecto, buffers DMA del board file, `HCI_80211` y suspensión en
+  WoW (`WLAN_CONFIG_PM_SUSPEND 2`).
+- `wifi/Android.mk`: lo compila después del kernel vía
+  `TARGET_KERNEL_MODULES := Y210_AR6000_MODULE` (hook de
+  `build/core/tasks/kernel.mk` de CM9; en CM7 hay que ver cómo se compila el
+  kernel). `wifi/build_ar6000.sh` hace lo mismo a mano contra un `KERNEL_OBJ`.
+
+Resultados en CM9: conecta con la MAC real del EEPROM (el blob la generaba al
+azar en cada arranque), 16 min sin cortes (el corte cada ~5 min por `cscan`
+rechazado -> `DRIVER HANGED` no aparece), 9 ciclos de suspensión en WoW sin
+desconexión y sin `CMD5`.
+
+Para portarlo a CM7: mismo kernel 2.6.38 (mismo `vermagic`), mismo blob y
+mismo firmware, así que debería compilar casi igual. Diferencias a revisar:
+CM7 pasa `WIFI_DRIVER_MODULE_ARG` (`ifname=eth0` etc., compatible) y usa
+`ath_supplicant`; el fix de suspensión de esta sección (relojes del slot sin
+WoW) puede convivir o volverse innecesario con el driver de fuente. Falta
+también `ar6000_cal_powerTuned` de Huawei (ajuste de potencia TX desde
+`/data/misc/wifi/Cal_powerTuned_pa.bin`), que RC.734 no trae.
