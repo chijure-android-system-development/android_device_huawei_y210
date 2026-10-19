@@ -150,6 +150,9 @@ public:
     void receiveCameraStats(camstats_type stype, camera_preview_histogram_info* histinfo);
     void receiveRecordingFrame(struct msm_frame *frame);
     void receiveJpegPicture(status_t status, mm_camera_buffer_t *encoded_buffer);
+    void receiveSoftwareJpeg();
+    /* read by the static liboemcamera event callback */
+    bool mSoftwareJpegDelivered;
     void jpeg_set_location();
     void receiveJpegPictureFragment(uint8_t *buf, uint32_t size);
     void notifyShutter(bool mPlayShutterSoundOnly);
