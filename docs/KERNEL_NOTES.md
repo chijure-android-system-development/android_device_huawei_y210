@@ -115,3 +115,16 @@ Pendiente con el kernel propio: Bluetooth A2DP.
 ## Wi-Fi tras suspensión
 
 Ver WIFI_NOTES.md ("Wi-Fi sin datos después de suspender").
+
+## RAM console / `last_kmsg` (intento fallido, 2026-10-19)
+
+`CONFIG_ANDROID_RAM_CONSOLE=y` está activo pero ningún board file registra el
+dispositivo `ram_console`, así que `/proc/last_kmsg` no existe y un reinicio no
+deja rastro del kernel anterior. Se probó reservar 128 KB con
+`memblock_remove(memblock_end_of_DRAM() - SZ_128K, ...)` al inicio de
+`msm7x27a_reserve()` (antes de `msm_reserve()`) y registrar el dispositivo en
+`msm7x2x_init()`: el kernel **no arranca** (cuelga antes de levantar USB; se
+recuperó flasheando el boot anterior desde TWRP). Probablemente el tope de la
+RAM de Linux no está libre en esta placa o correr las reservas de pmem rompe
+algo. Para reintentarlo hace falta consola serie o elegir una región que se
+sepa libre (no el tope de DRAM). El zImage del device tree no cambió.
