@@ -29,3 +29,14 @@ Cambios para el Y210 (todos replican lo que hace el módulo stock):
 Diferencias conocidas con el stock: falta `ar6000_cal_powerTuned` (ajuste de
 potencia TX de Huawei desde `/data/misc/wifi/Cal_powerTuned_pa.bin`) y la MAC
 ahora sale del EEPROM del chip en vez de generarse al azar en cada arranque.
+
+## Validación (2026-10-19)
+
+- 16 min conectado (32 muestras cada 30 s): sin cortes ni recargas del módulo.
+  El corte cada ~5 min del blob (`cscan` rechazado -> `DRIVER HANGED`) no
+  aparece.
+- Suspensión real sin cable USB (con USB, `usb_bus_active` impide dormir):
+  6 ciclos en ~8 min, `ar6000_suspend_ev`/`ar6000_resume_ev` en cada uno,
+  0 errores `CMD5`/`card was removed`, WiFi conectado y con ping al
+  despertar. Es el bug del blob documentado en el `WIFI_NOTES.md` de CM7
+  (no pide `MMC_PM_KEEP_POWER`); `hif.c` de RC.734 sí lo hace.
