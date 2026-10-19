@@ -1357,3 +1357,52 @@ causas encadenadas:
    FM_DEBUG` de `include/media/tavarua.h`) para leer `ERROR_CODE`, o comparar
    el `SRCHCTRL` que arma el stack de FM stock.
 
+
+## Búsqueda: umbral roto y búsqueda hacia abajo (2026-10-19)
+
+**Umbral de señal (corregido).** `FMRadioService` llama
+`setSignalThreshold(FM_RX_SIGNAL_STRENGTH_VERY_WEAK)` y el `FmReceiver` de CM7
+pasa la constante tal cual (-141) como umbral RMSSI. El driver la guarda en un
+byte con signo: -141 queda en **+115** (0x73, se lee con
+`V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH`). Con ese umbral el chip solo se detiene
+en emisoras muy fuertes: las búsquedas pasaban de largo y la app las cancelaba
+a los 5 s ("se siente lento"). El CAF nuevo traduce las constantes a niveles
+RMSSI (-105/-100/-96/-90). Corregido en el JNI
+(`patches/frameworks_base_android_hardware_fm_qcom.cpp`,
+`fmSetControlNative`), no en `FmReceiver.java`: el framework está odexado y
+cambiar `framework.odex` invalida los odex que dependen de él. Validado: hacia
+arriba 87.5→90.0 en 1.8 s, 90.0→90.9 en 0.75 s, 90.9→91.5 en 0.55 s.
+
+**Búsqueda hacia abajo (en curso).** El driver, el JNI y FmRxControls son
+iguales a los de CAF y a otros kernels (LG E400, HTC msm8660, Huawei Y300 en
+GitHub), y el HAL stock de Huawei (`libqcomfm_if.so`, `HandleSearch`) manda lo
+mismo: SRCHMODE, SCANDWELL y `VIDIOC_S_HW_FREQ_SEEK` con `seek_upward=dir`. Con
+una herramienta propia (fd de `/dev/radio0` pedido a `fminit` por el socket
+abstracto `fminit_radio0`) se vio que hacia abajo el chip **barre la banda sin
+detenerse en ninguna emisora** (~70 ms por canal), también con el umbral
+correcto y con HLSI forzado; hacia arriba se detiene. Es el firmware.
+
+Emulación en el kernel (rama `fm-seekdown-wip` de
+github.com/chijure/android_kernel_huawei_y210, commit `a151b954`, con trazas de
+depuración): sintoniza una ventana por debajo, busca hacia arriba y se queda con
+la última emisora bajo la frecuencia original; la ventana empieza en 0.5 MHz y
+se duplica si está vacía; vigila FREQ cada 30 ms y corta la búsqueda al pasar
+la frecuencia original (leer FREQ no estorba la búsqueda, comprobado con el
+umbral ya corregido); oculta las interrupciones intermedias y responde
+`G_FREQUENCY`/`G_TUNER` desde caché mientras corre (el peek de RMSSI de
+`G_TUNER`, que la app hace cada ~110 ms y aparece como `UNKNOWN XFR = 98`,
+pisaba las sintonías). Estado:
+
+- Desde la herramienta funciona: 91.5→90.9 en ~1.5 s.
+- Desde la app, sin el corte por FREQ, tardó ~27 s desde 104.2 (pocas
+  emisoras arriba) y el `SEEK_COMPLETE` final no llegó a la app (sí el TUNE).
+  La versión con el corte (kernel #17, flasheado ahora) falta probarla.
+
+Boot images: `~/y210_kernel_backups/boot-cm7-968abe96-20261019.img` (el que va
+en la ROM, md5 `1ba161bc…`) y `boot-cm7-fm-seekdown-wip-20261019.img` (#17).
+Para volver: `flash_image` + `dump_image`/`cmp` (ver `KERNEL_NOTES.md`).
+
+**Bug aparte visto en la prueba:** si la app enciende la radio sin audífonos
+y luego se conectan, el lector de eventos queda en bucle con `VIDIOC_DQBUF
+failed: Invalid argument` (`Received <0> event`) y la radio no responde hasta
+reiniciar. Sin investigar.

@@ -223,6 +223,19 @@ static jint fmSetControlNative(JNIEnv* /*env*/, jobject /*thiz*/, jint fd, jint 
     memset(&control, 0, sizeof(control));
     control.id = static_cast<uint32_t>(id);
     control.value = value;
+    // FmReceiver.setSignalThreshold() passes its FM_RX_SIGNAL_STRENGTH_*
+    // constants (-141/-126/-111/-96) as the RMSSI threshold. The driver
+    // stores a signed byte, so -141 became +115 and seeks skipped all but
+    // the strongest stations. Map them to the RMSSI levels CAF uses.
+    const uint32_t V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH = V4L2_CID_PRIVATE_BASE + 8;
+    if (control.id == V4L2_CID_PRIVATE_TAVARUA_SIGNAL_TH) {
+        switch (value) {
+        case -141: control.value = -105; break;
+        case -126: control.value = -100; break;
+        case -111: control.value = -96; break;
+        case -96: control.value = -90; break;
+        }
+    }
     if (ioctl(fd, VIDIOC_S_CTRL, &control) < 0) {
         LOGW("VIDIOC_S_CTRL id=0x%x value=%d failed: %s",
                 control.id, value, strerror(errno));
