@@ -1,7 +1,7 @@
-From 2a177b2c322951b0698fcd916a3ff520ae1715cc Mon Sep 17 00:00:00 2001
+From fffddf178283df1126d6cac72c8a06c4f301b0c5 Mon Sep 17 00:00:00 2001
 From: Jhuan Reategui Solis <reateguisolisjm@gmail.com>
 Date: Tue, 2 Jun 2026 20:14:22 -0500
-Subject: [PATCH 2/4] =?UTF-8?q?gpu:=20a=C3=B1adir=20libos=5Fcompat=20como?=
+Subject: [PATCH 2/3] =?UTF-8?q?gpu:=20a=C3=B1adir=20libos=5Fcompat=20como?=
  =?UTF-8?q?=20dependencia=20de=20SurfaceFlinger?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

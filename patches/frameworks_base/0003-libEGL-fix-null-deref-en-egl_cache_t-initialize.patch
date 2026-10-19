@@ -1,7 +1,7 @@
-From e6f9b05837b4a8b53d2ef141100beb912bb9bf76 Mon Sep 17 00:00:00 2001
+From e842ee0454ce63fa25887422452ff233a3cbadaa Mon Sep 17 00:00:00 2001
 From: Jhuan Reategui Solis <reateguisolisjm@gmail.com>
 Date: Tue, 2 Jun 2026 22:25:20 -0500
-Subject: [PATCH 3/4] libEGL: fix null deref en egl_cache_t::initialize
+Subject: [PATCH 3/3] libEGL: fix null deref en egl_cache_t::initialize
 
 display->disp[i].queryString.extensions puede ser NULL cuando el driver
 Adreno carga pero falla antes de completar eglInitialize. strlen(NULL)

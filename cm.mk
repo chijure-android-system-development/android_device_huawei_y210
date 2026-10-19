@@ -1,3 +1,9 @@
+# Must come before the inherits: the first PRODUCT_COPY_FILES entry for a
+# destination wins, and this replaces vendor/cm's apns-conf.xml, which has
+# no Peru (MCC 716) entries.
+PRODUCT_COPY_FILES := \
+    device/huawei/y210/prebuilt/system/etc/apns-conf.xml:system/etc/apns-conf.xml
+
 $(call inherit-product, $(SRC_TARGET_DIR)/product/languages_full.mk)
 
 $(call inherit-product, vendor/cm/config/gsm.mk)
