@@ -382,8 +382,10 @@ Validado en CM7: carga y conecta con `ath_supplicant`, 16 min (32 muestras)
 sin cortes ni eventos `HANGED`/recarga, y 3 ciclos de suspensión sin cable
 sin desconexión ni `CMD5`. Con el kernel `968abe96` el slot no se suspende
 (solo relojes), así que el driver no entra en WoW; eso sigue funcionando.
-Falta `ar6000_cal_powerTuned` de Huawei (ajuste de potencia TX desde
-`/data/misc/wifi/Cal_powerTuned_pa.bin`), que RC.734 no trae.
+`ar6000_cal_powerTuned` de Huawei (ajuste de potencia TX desde
+`/data/misc/wifi/Cal_powerTuned_pa.bin`), que RC.734 no trae, se agregó el
+2026-10-19 reconstruyéndolo del módulo stock (ver `wifi/AR6kSDK/README.y210.md`):
+dmesg `ar6000: power tuned -2/6 -2/7 -2/5, ext 1024`, conecta y navega.
 
 Bug encontrado en la prueba (no del driver): después de un wipe el Wi-Fi no
 conectaba (`Unable to open connection to supplicant on "eth0"`) porque
