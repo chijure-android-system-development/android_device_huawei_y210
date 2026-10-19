@@ -9,13 +9,6 @@ PRODUCT_PACKAGE_OVERLAYS := device/huawei/y210/overlay
 # The gps config appropriate for this device
 $(call inherit-product, device/common/gps/gps_us_supl.mk)
 
-# Adds HuaweiQualcommRIL (extends QualcommSharedRIL) into framework.jar's
-# sources, matching device/lge/g300-style JB device trees. Needs cm.mk (the
-# top-level product file that inherits this one) to have LOCAL_PATH set to
-# device/huawei/y210 at this point, which it does via the normal product
-# makefile include mechanism.
-FRAMEWORKS_BASE_SUBDIRS += ../../$(LOCAL_PATH)/ril/
-
 $(call inherit-product-if-exists, vendor/huawei/y210/y210-vendor.mk)
 
 DEVICE_PACKAGE_OVERLAYS += device/huawei/y210/overlay
@@ -64,6 +57,11 @@ PRODUCT_PACKAGES += \
     rild \
     Mms
 
+# RIL: shim for libril-qc-1 and the HuaweiY210RIL class (ril/)
+PRODUCT_PACKAGES += \
+    libril-y210-shim \
+    y210-telephony
+
 # Install the features available on this device.
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/handheld_core_hardware.xml:system/etc/permissions/handheld_core_hardware.xml \
@@ -78,7 +76,6 @@ PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/init.huawei.rc:root/init.huawei.rc \
     device/huawei/y210/prebuilt/init.target.rc:root/init.target.rc \
     device/huawei/y210/prebuilt/init.y210.rc:root/init.y210.rc \
-    device/huawei/y210/prebuilt/init.mem.rc:root/init.mem.rc \
     device/huawei/y210/prebuilt/ueventd.huawei.rc:root/ueventd.huawei.rc \
     device/huawei/y210/prebuilt/init.qcom.sh:root/init.qcom.sh \
     device/huawei/y210/prebuilt/init.huawei.usb.rc:root/init.huawei.usb.rc \

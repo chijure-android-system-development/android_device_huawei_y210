@@ -8,12 +8,46 @@ RIL / Baseband Notes (Y210 / MSM7x27A, CM9/ICS)
 | IMEI | **OK** |
 | Llamadas voz | **OK** |
 | SMS | **OK** |
+| SIM (IMSI, operador, APN) | **OK** — ver "SIM / datos en CM9" |
 | Datos móviles (rmnet0) | **OK** — IP real validada |
 | qmuxd + qmiproxy | **OK** |
 
 **RIL class en CM9:** `com.cyanogenmod.internal.telephony.HuaweiQualcommRIL`
 (no `QualcommNoSimReadyRIL` de CM7). El crash `ClassNotFoundException` de
 arranque se resolvió añadiendo el jar correcto al classpath del boot.
+
+## SIM / datos en CM9 (2026-10-18)
+
+`libril-qc-1.so` declara RIL v6 pero usa los layouts del libril stock de
+Huawei/CAF. Sin adaptarlo, la SIM quedaba en `NOT_READY` (sin IMSI, operador
+de la SIM ni APN) y los datos no levantaban. Se resuelve en el device tree,
+sin parches de plataforma:
+
+- `ril/rilshim` -> `libril-y210-shim.so` (`rild.libpath` en `system.prop`):
+  agrega el AID a `GET_IMSI` (ICS lo despacha con `dispatchVoid` y el blob
+  hacía SIGSEGV en `qcril_uim_request_get_imsi`), pasa `SIM_IO` como el
+  struct de 40 bytes del stock (AID en `+36`; con el de ICS crasheaba en
+  `vfprintf`) y convierte la respuesta de data call de 32 bytes a
+  `RIL_Data_Call_Response_v6`.
+- `ril/telephony` -> `y210-telephony.jar` con `HuaweiY210RIL`
+  (`ro.telephony.ril_class`), en el `BOOTCLASSPATH` de `init.rc`: deriva
+  `SIM_READY` de `GET_SIM_STATUS` (el blob nunca lo reporta), escribe el AID
+  al final de `SIM_IO` y manda el protocolo PDP en `SETUP_DATA_CALL` (qcril
+  rechazaba el `"0"` de `HuaweiRIL`: `invalid ip family`).
+- APN Claro PE (`claro.pe`, `claro`/`claro`, PAP) en
+  `prebuilt/system/etc/apns-conf.xml`.
+
+`QualcommSharedRIL` no sirve tal cual: lee 4 contadores de PIN por app que el
+libril de ICS no escribe (`Unrecognized RIL_AppType`).
+
+Validado: `gsm.sim.state=READY`, `gsm.sim.operator.numeric=71610`, `rmnet0`
+con IP, ping/DNS por HSPA, sin tombstones de `rild`. Logs esperados:
+
+```
+RILShim: AID GSM/USIM: a0000000871002f972ff0189
+RILJ: SIM app state APPSTATE_READY type APPTYPE_USIM
+RILShim: SETUP_DATA_CALL: status=0 cid=0 ifname=rmnet0 addr=...
+```
 
 ---
 

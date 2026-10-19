@@ -38,16 +38,23 @@ import com.android.internal.telephony.cdma.CdmaInformationRecords;
 import java.util.ArrayList;
 
 /**
+ * RIL class for the Huawei Y210 (ro.telephony.ril_class=HuaweiY210RIL).
+ * Lives in the device tree as y210-telephony.jar on the BOOTCLASSPATH.
+ *
  * Qualcomm RIL class for basebands that do not send the SIM status
  * piggybacked in RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED. Instead,
  * these radios will send radio state and we have to query for SIM
  * status separately.
- * Custom Qualcomm No SimReady RIL for Huawei
+ *
+ * qcril in libril-qc-1 dereferences the AID of GET_IMSI, PIN/PUK and
+ * facility-lock requests; the JB base class sends a null AID for the
+ * default SIM, so those requests use mAid (from GET_SIM_STATUS) instead.
+ * The libril-level layout fixes live in ril/rilshim.
  *
  * {@hide}
  */
 
-public class HuaweiQualcommRIL extends QualcommSharedRIL implements CommandsInterface {
+public class HuaweiY210RIL extends QualcommSharedRIL implements CommandsInterface {
     boolean RILJ_LOGV = true;
     boolean RILJ_LOGD = true;
 
@@ -57,7 +64,7 @@ public class HuaweiQualcommRIL extends QualcommSharedRIL implements CommandsInte
     private final int RIL_INT_RADIO_ON_NG = 10;
     private final int RIL_INT_RADIO_ON_HTC = 13;
 
-    public HuaweiQualcommRIL(Context context, int networkMode, int cdmaSubscription) {
+    public HuaweiY210RIL(Context context, int networkMode, int cdmaSubscription) {
         super(context, networkMode, cdmaSubscription);
         mQANElements = 4;
     }
@@ -90,6 +97,74 @@ public class HuaweiQualcommRIL extends QualcommSharedRIL implements CommandsInte
                     + p1 + "," + p2 + "," + p3);
 
         send(rr);
+    }
+
+    private String aidOrSim(String aid) {
+        return aid != null ? aid : mAid;
+    }
+
+    @Override
+    public void
+    getIMSI(Message result) {
+        getIMSIForApp(mAid, result);
+    }
+
+    @Override
+    public void
+    getIMSIForApp(String aid, Message result) {
+        super.getIMSIForApp(aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    supplyIccPinForApp(String pin, String aid, Message result) {
+        super.supplyIccPinForApp(pin, aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    supplyIccPukForApp(String puk, String newPin, String aid, Message result) {
+        super.supplyIccPukForApp(puk, newPin, aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    supplyIccPin2ForApp(String pin, String aid, Message result) {
+        super.supplyIccPin2ForApp(pin, aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    supplyIccPuk2ForApp(String puk, String newPin2, String aid, Message result) {
+        super.supplyIccPuk2ForApp(puk, newPin2, aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    changeIccPinForApp(String oldPin, String newPin, String aid, Message result) {
+        super.changeIccPinForApp(oldPin, newPin, aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    changeIccPin2ForApp(String oldPin2, String newPin2, String aid, Message result) {
+        super.changeIccPin2ForApp(oldPin2, newPin2, aidOrSim(aid), result);
+    }
+
+    @Override
+    public void
+    queryFacilityLockForApp(String facility, String password, int serviceClass,
+                            String appId, Message response) {
+        super.queryFacilityLockForApp(facility, password, serviceClass,
+                aidOrSim(appId), response);
+    }
+
+    @Override
+    public void
+    setFacilityLockForApp(String facility, boolean lockState, String password,
+                          int serviceClass, String appId, Message response) {
+        super.setFacilityLockForApp(facility, lockState, password, serviceClass,
+                aidOrSim(appId), response);
     }
 
     @Override

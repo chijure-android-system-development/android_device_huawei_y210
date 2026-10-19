@@ -48,6 +48,10 @@ on boot-pause
     exec system/bin/battery_charging
 
 on boot
+    # Restart adbd as root (userdebug, ro.debuggable=1); root_access comes
+    # from cm.mk's PRODUCT_DEFAULT_PROPERTY_OVERRIDES.
+    setprop service.adb.root 1
+
     # Allow copybit/EGL userspace (including app processes via libagl/EGL) to
     # access the framebuffer and KGSL nodes. Without this, copybit.msm7k fails
     # to open fb0 with EACCES and HW EGL may fail to initialize.

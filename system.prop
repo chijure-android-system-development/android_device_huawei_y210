@@ -3,10 +3,10 @@
 #
 
 # RIL (Qualcomm MSM7x27A). Match stock Y210 RIL blob selection.
-rild.libpath=/system/lib/libril-qc-1.so
+rild.libpath=/system/lib/libril-y210-shim.so
 rild.libargs=-d /dev/smd0
 ro.telephony.default_network=0
-ro.telephony.ril_class=HuaweiQualcommRIL
+ro.telephony.ril_class=HuaweiY210RIL
 ril.subscription.types=NV,RUIM
 ro.baseband=msm
 ro.sf.lcd_density=160
