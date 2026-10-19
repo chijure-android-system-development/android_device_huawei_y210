@@ -1,8 +1,8 @@
 # Parches de plataforma (CM9)
 
 Lo que se puede resolver en el device tree vive en el device tree (HALs,
-shims, prebuilts, props). Aquí solo quedan los cambios que no tienen otro
-lugar posible. Se reconstruyen después de un `repo sync` con:
+shims, módulos, prebuilts, props). Aquí solo quedan los cambios que no tienen
+otro lugar posible. Se reconstruyen después de un `repo sync` con:
 
 ```bash
 device/huawei/y210/patches/apply.sh
@@ -14,18 +14,23 @@ ya están aplicados (compara el asunto del commit).
 
 | Proyecto | Parche | Por qué no puede ir en el device tree |
 |---|---|---|
-| `build` | wallpapers / `sed -i` | El filtro de `PRODUCT_PACKAGES` tiene que correr después de resolver el grafo de productos; en un `.mk` del device es un no-op. |
-| `vendor/cm` | `squisher` sin `sed -i` | Script de empaquetado de CM. |
-| `frameworks/base` | Bluetooth, SurfaceFlinger, libEGL | Código del framework (`BluetoothService`, `libsurfaceflinger`, `libEGL`). |
+| `frameworks/base` | reintento en `NoSuchAdapter` | Carrera dentro del event loop de Bluetooth del framework: `bluetoothd` se registra en D-Bus antes que `hci0`. |
 | `external/webkit` | `scratchContext` | Bug de WebKit: el navegador crashea con SVG cuando Android reporta poca memoria. |
 
-Resuelto en el device tree en vez de parches:
+Resuelto fuera de los parches (2026-10-18/19):
 
-- RIL: `ril/rilshim` (`libril-y210-shim.so`, adapta `libril-qc-1.so` al libril
-  de ICS) y `ril/telephony` (`y210-telephony.jar` con `HuaweiY210RIL`, en el
-  `BOOTCLASSPATH` de `init.rc`).
+- RIL: `ril/rilshim` (`libril-y210-shim.so`) y `ril/telephony`
+  (`y210-telephony.jar` con `HuaweiY210RIL`, en el `BOOTCLASSPATH`).
 - APN Claro PE: `prebuilt/system/etc/apns-conf.xml` (prioridad en `cm.mk`).
 - adb root: `init.huawei.rc` + `cm.mk`.
+- Wallpapers/VideoEditor de CM (no entran en `system`): `overrides/`
+  (`Y210Overrides`, paquete vacío con `LOCAL_OVERRIDES_PACKAGES`).
+- NAP de Bluetooth: era `CONFIG_BT_BNEP` apagado en el kernel.
+- `libos_compat` + SurfaceFlinger y `egl_cache` de `libEGL`: innecesarios con
+  el `libgsl.so` del e400 (ver `RENDER_NOTES.md`).
+- `sed -i` en `build/core/Makefile` y `vendor/cm/tools/squisher`: problema
+  del entorno Docker Desktop, no de la ROM; lo resuelve
+  `~/android-build-docker/cm9-docker/sed-inplace-wrapper.sh` en la imagen.
 
 Para agregar un parche: commitear en el repo de plataforma y exportarlo con
 `git format-patch -o device/huawei/y210/patches/<proyecto> <base>..HEAD`.

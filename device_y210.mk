@@ -44,8 +44,12 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     lights.y210 \
     gps.y210 \
-    FileManager \
-    libos_compat
+    FileManager
+
+# Drops CM's wallpapers/VideoEditor (~20MB, no room on system) via
+# LOCAL_OVERRIDES_PACKAGES (overrides/)
+PRODUCT_PACKAGES += \
+    Y210Overrides
 
 # RIL: shim for libril-qc-1 and the HuaweiY210RIL class (ril/)
 PRODUCT_PACKAGES += \

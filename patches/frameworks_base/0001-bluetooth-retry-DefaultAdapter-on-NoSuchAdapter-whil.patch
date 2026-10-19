@@ -1,0 +1,40 @@
+From 560a7b540fbe0e5e7e9374bd768c78544be2311b Mon Sep 17 00:00:00 2001
+From: Jhuan Reategui Solis <reateguisolisjm@gmail.com>
+Date: Mon, 19 Oct 2026 01:06:03 -0500
+Subject: [PATCH] bluetooth: retry DefaultAdapter on NoSuchAdapter while
+ bluetoothd starts
+
+bluetoothd registers on D-Bus before hci0 shows up; the event loop gave
+up on the first org.bluez.Error.NoSuchAdapter and shut the whole stack
+down. Retry every 10 ms instead.
+
+(The NAP UUID workaround that used to live here is gone: NetworkServer
+was missing because the Y210 kernel had CONFIG_BT_BNEP off, now fixed
+in the kernel.)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Change-Id: I95d9b6361f2fb6e249fd72c929682bdb732520f5
+---
+ core/jni/android_server_BluetoothEventLoop.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/core/jni/android_server_BluetoothEventLoop.cpp b/core/jni/android_server_BluetoothEventLoop.cpp
+index 192e1e36d13..b8d2ac3616a 100644
+--- a/core/jni/android_server_BluetoothEventLoop.cpp
++++ b/core/jni/android_server_BluetoothEventLoop.cpp
+@@ -344,6 +344,12 @@ const char * get_adapter_path(DBusConnection *conn) {
+                     LOG_AND_FREE_DBUS_ERROR(&err);
+                     usleep(10000);  // 10 ms
+                     continue;
++                } else if (dbus_error_has_name(&err,
++                    "org.bluez.Error.NoSuchAdapter")) {
++                    // bluetoothd up but hci0 not yet registered, retry
++                    LOG_AND_FREE_DBUS_ERROR(&err);
++                    usleep(10000);  // 10 ms
++                    continue;
+                 } else {
+                     // Some other error we weren't expecting
+                     LOG_AND_FREE_DBUS_ERROR(&err);
+-- 
+2.43.0
+

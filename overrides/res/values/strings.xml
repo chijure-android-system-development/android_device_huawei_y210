@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- build/core/java.mk refuses a package without sources or resources. -->
+<resources>
+    <string name="app_name">Y210 overrides</string>
+</resources>
