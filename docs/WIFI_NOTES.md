@@ -390,3 +390,25 @@ conectaba (`Unable to open connection to supplicant on "eth0"`) porque
 `init.huawei.rc` creaba el symlink `/data/system/wpa_supplicant` antes del
 `mkdir /data/system`; con `/data` vacío el symlink fallaba en silencio.
 Corregido creando `/data/system` antes.
+
+## Hotspot (2026-10-19)
+
+No levantaba (`Softap startap - connect to hostapd fails`). Dos causas:
+
+1. `libwpa_client`: `wpa_ctrl_request()` de `external/wpa_supplicant_6`
+   devuelve -2 sin enviar nada si `init.svc.wpa_supplicant=stopped` (hack de
+   CAF contra un ANR de Settings). En hotspot el supplicant está parado a
+   propósito, así que el `ATTACH` de netd a hostapd fallaba siempre. Como el
+   supplicant es el `ath_supplicant` stock, de `external/wpa_supplicant_6`
+   solo se usaban `libwpa_client` y `wpa_cli`: ahora salen de
+   `libwpa_client/` (mismo `wpa_ctrl.c`, sin el chequeo para sockets de
+   hostapd) y `WPA_SUPPLICANT_VERSION := VER_0_6_X_Y210` evita compilar
+   `external/wpa_supplicant*`. Sin parche de plataforma.
+2. Socket viejo `/data/misc/wifi/hostapd/athap0` de un hostapd anterior: netd
+   lo ve al instante y conecta antes de que el hostapd nuevo haga bind
+   (`Connection refused`); en el reintento reutiliza ese hostapd con el
+   driver ya recargado debajo y `athap0` queda en `link is not ready`.
+   `hostapd_y210.sh` lo borra antes de arrancar.
+
+Validado: cliente asociado (`AP-STA-CONNECTED`), DHCP de dnsmasq
+(192.168.43.x) y navegación por NAT sobre `rmnet0`.

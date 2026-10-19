@@ -88,7 +88,9 @@ WIFI_DRIVER_MODULE_PATH     := /system/wifi/ar6000.ko
 # Mismos argumentos que wlan_tool loaddriver (wlan.driver.args por defecto)
 WIFI_DRIVER_MODULE_ARG      := "targetconf=default devmode=sta submode=none ifname=eth0"
 WIFI_DRIVER_MODULE_NAME     := ar6000
-WPA_SUPPLICANT_VERSION      := VER_0_6_X
+# VER_0_6_X_Y210: libwpa_client y wpa_cli salen de libwpa_client (el
+# supplicant es el ath_supplicant stock); no se compila external/wpa_supplicant*.
+WPA_SUPPLICANT_VERSION      := VER_0_6_X_Y210
 WIFI_PRE_LOADER             := wlan_detect
 # Servicio del rc que espera al firmware, levanta eth0 y pone wlan.driver.status=ok
 WIFI_FIRMWARE_LOADER        := wlan_loader

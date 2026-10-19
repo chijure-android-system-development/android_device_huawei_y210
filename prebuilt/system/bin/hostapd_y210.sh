@@ -8,4 +8,10 @@ if [ ! -L /dev/random ]; then
     ln -s /dev/urandom /dev/random
 fi
 
+# A control socket left by a previous hostapd (killed, not cleaned up) makes
+# netd connect before the new one binds ("Connection refused"); netd then
+# retries against this hostapd with the driver already reloaded under it and
+# athap0 never comes up. Remove it before starting.
+rm -f /data/misc/wifi/hostapd/athap0
+
 exec /system/bin/hostapd /data/misc/wifi/hostapd.conf

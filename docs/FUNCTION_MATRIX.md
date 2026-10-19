@@ -91,7 +91,7 @@ Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 - Validación post-flash limpio (sin staging manual): **OK** (2026-07-10: build desde cero + flasheo limpio, `test_y210.sh` completo dio 54 PASS / 0 FAIL / 3 SKIP / 26 MANUAL tras corregir 2 falsos negativos del propio script — ver más abajo)
 - Wi-Fi tethering (hotspot): **OK** (validado con 2 clientes simultáneos; NAT sobre rmnet0 funcionando)
 - Carga del driver con el `wifi.c` de CM7 sin parche (`WIFI_FIRMWARE_LOADER` + `wlan_loader_y210.sh`): **OK** (2026-10-18: 3 ciclos on/off, escaneo, arranque con Wi-Fi encendido que reconecta con DHCP, ping; ver `WIFI_NOTES.md`)
-- Hotspot tras retirar `system_netd.patch` y el parche de `libhardware_legacy`: **Pendiente** revalidar con un cliente (2026-10-18)
+- Hotspot tras retirar `system_netd.patch` y el parche de `libhardware_legacy`: **OK** (2026-10-19, `libwpa_client/` + socket viejo en `hostapd_y210.sh`; ver WIFI_NOTES.md)
 - Wi-Fi después de deep sleep: **OK** con el kernel propio `968abe96` (bug del stock: quedaba sin datos hasta un off/on; ver `WIFI_NOTES.md`)
 
 ### Bluetooth
