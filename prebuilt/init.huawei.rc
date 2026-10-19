@@ -73,6 +73,11 @@ on boot
     mkdir /data/misc/wifi/bin 0775 system system
     mkdir /data/misc/dhcp 0770 dhcp dhcp
     chown dhcp dhcp /data/misc/dhcp
+    # libhardware_legacy prefers /data/system/wpa_supplicant/<iface> whenever that
+    # path exists, but our supplicant listens on the init socket wpa_eth0
+    # (wifi.c rewrites ctrl_interface=eth0). A stale symlink/dir left by older
+    # builds or ROMs makes the framework hit a dead socket ("Connection refused").
+    exec /system/bin/rm -rf /data/system/wpa_supplicant
     # Seed the supplicant config only on first boot; do not clobber saved networks.
     exec /system/bin/sh -c "if [ ! -f /data/misc/wifi/wpa_supplicant.conf ]; then cat /system/etc/wifi/wpa_supplicant.conf > /data/misc/wifi/wpa_supplicant.conf; fi"
     chown wifi wifi /data/misc/wifi/wpa_supplicant.conf
