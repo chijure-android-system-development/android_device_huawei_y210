@@ -1,0 +1,30 @@
+From e6f9b05837b4a8b53d2ef141100beb912bb9bf76 Mon Sep 17 00:00:00 2001
+From: Jhuan Reategui Solis <reateguisolisjm@gmail.com>
+Date: Tue, 2 Jun 2026 22:25:20 -0500
+Subject: [PATCH 3/4] libEGL: fix null deref en egl_cache_t::initialize
+
+display->disp[i].queryString.extensions puede ser NULL cuando el driver
+Adreno carga pero falla antes de completar eglInitialize. strlen(NULL)
+causa SIGSEGV en addr 0x0 crasheando SurfaceFlinger en bootloop.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Change-Id: I0b493fa0ba9c738ad02e8a3003edac4c84b7d9e0
+---
+ opengl/libs/EGL/egl_cache.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/opengl/libs/EGL/egl_cache.cpp b/opengl/libs/EGL/egl_cache.cpp
+index c4a7466ec53..17579f3c5fa 100644
+--- a/opengl/libs/EGL/egl_cache.cpp
++++ b/opengl/libs/EGL/egl_cache.cpp
+@@ -87,6 +87,7 @@ void egl_cache_t::initialize(egl_display_t *display) {
+         egl_connection_t* const cnx = &gEGLImpl[i];
+         if (cnx->dso && cnx->major >= 0 && cnx->minor >= 0) {
+             const char* exts = display->disp[i].queryString.extensions;
++            if (exts == NULL) continue;  // driver loaded but display not yet initialized
+             size_t bcExtLen = strlen(BC_EXT_STR);
+             size_t extsLen = strlen(exts);
+             bool equal = !strcmp(BC_EXT_STR, exts);
+-- 
+2.43.0
+

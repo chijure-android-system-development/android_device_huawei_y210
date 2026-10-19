@@ -106,6 +106,12 @@ BOARD_FM_DEVICE := qcom
 
 # RIL
 # BOARD_PROVIDES_LIBRIL := true
+# libril-qc-1 dereferences the USIM AID in GET_IMSI (see HuaweiQualcommRIL).
+BOARD_RIL_GET_IMSI_TAKES_AID := true
+# ...and reads RIL_SIM_IO_v6 shifted by one int (aidPtr at +36).
+BOARD_RIL_SIM_IO_LEADING_INT := true
+# ...and answers SETUP_DATA_CALL/DATA_CALL_LIST with the 32-byte pre-v6 struct.
+BOARD_RIL_DATA_CALL_RESPONSE_V5 := true
 
 # Wi-Fi
 BOARD_WPA_SUPPLICANT_DRIVER := WEXT
