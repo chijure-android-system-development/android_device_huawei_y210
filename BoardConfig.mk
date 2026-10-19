@@ -111,6 +111,8 @@ BOARD_FM_DEVICE := qcom
 BOARD_WPA_SUPPLICANT_DRIVER := WEXT
 BOARD_WLAN_DEVICE           := ath6kl
 WIFI_DRIVER_MODULE_PATH     := /system/wifi/ar6000.ko
+# ar6000.ko is built from source by wifi/Android.mk after the kernel.
+TARGET_KERNEL_MODULES       := Y210_AR6000_MODULE
 WIFI_DRIVER_MODULE_ARG      := ""
 WIFI_DRIVER_MODULE_NAME     := ar6000
 BOARD_WPA_SUPPLICANT_PRIVATE_LIB := lib_driver_cmd_ath6kl

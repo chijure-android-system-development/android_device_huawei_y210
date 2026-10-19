@@ -119,7 +119,6 @@ PRODUCT_COPY_FILES += \
 
 # Wi-Fi firmware and module (Qualcomm/Atheros)
 PRODUCT_COPY_FILES += \
-    device/huawei/y210/prebuilt/system/wifi/ar6000.ko:system/wifi/ar6000.ko \
     device/huawei/y210/prebuilt/system/bin/wlan_detect:system/bin/wlan_detect \
     device/huawei/y210/prebuilt/system/bin/wlan_tool:system/bin/wlan_tool \
     device/huawei/y210/prebuilt/system/etc/init.qcom.wifi.sh:system/etc/init.qcom.wifi.sh \
