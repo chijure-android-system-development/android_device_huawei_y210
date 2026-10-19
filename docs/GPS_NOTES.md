@@ -129,5 +129,7 @@ otra vez el `length` del módem (con el primer NUL como respaldo).
 reporta UTC exactamente 1024 semanas atrás (`mTime` de una ubicación de octubre
 de 2026 = marzo de 2007). `loc_eng_report_position` suma 1024 semanas a los
 timestamps anteriores al 2019-04-07. Validado: `mTime=1792439563000`
-(2026-10-19). Las fechas dentro del texto NMEA (`$GPRMC`) siguen como las manda
-el módem.
+(2026-10-19). Las fechas del texto NMEA también se corrigen:
+`loc_eng_fix_nmea_dates` (en `loc_eng_report_nmea`) suma las mismas 1024
+semanas al campo `ddmmyy` de `$GPRMC` y a día/mes/año de `$GPZDA` cuando son
+anteriores al rollover, sin cambiar el largo, y recalcula el checksum.

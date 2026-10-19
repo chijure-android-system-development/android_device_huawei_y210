@@ -122,6 +122,7 @@ Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 
 - NMEA crudo (`nmea_cb`): **OK** (2026-10-19: `$GPGGA/GSA/GSV/RMC/VTG` completas, ~1 Hz. El evento `NMEA_1HZ_REPORT` no se decodificaba porque su `case` estaba en la unión de ioctl; ahora va en la de eventos como en el stock, con `nmea_sentences` de 200 bytes. Ver `GPS_NOTES.md`)
 - Fecha/hora de las ubicaciones: **OK** (2026-10-19: el módem reporta UTC 1024 semanas atrasado, rollover de semanas GPS de 2019; el HAL lo corrige)
+- Fecha en el texto NMEA (`$GPRMC`/`$GPZDA`): **OK** (2026-10-19: `191026` con fix real, checksum válido)
 
 Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 

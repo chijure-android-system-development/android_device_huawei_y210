@@ -1302,6 +1302,109 @@ static void loc_eng_report_status (const rpc_loc_status_event_s_type *status_rep
    pthread_mutex_unlock (&loc_eng_data.deferred_action_mutex);
 }
 
+/* Days since 1970-01-01 for a proleptic Gregorian date, and back
+ * (H. Hinnant's civil-from-days); bionic in GB has no timegm(). */
+static long nmea_days_from_civil(int y, int m, int d)
+{
+   y -= m <= 2;
+   long era = (y >= 0 ? y : y - 399) / 400;
+   long yoe = y - era * 400;
+   long doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+   long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+   return era * 146097 + doe - 719468;
+}
+
+static void nmea_civil_from_days(long z, int *y, int *m, int *d)
+{
+   z += 719468;
+   long era = (z >= 0 ? z : z - 146096) / 146097;
+   long doe = z - era * 146097;
+   long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+   long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+   long mp = (5 * doy + 2) / 153;
+   *d = doy - (153 * mp + 2) / 5 + 1;
+   *m = mp + (mp < 10 ? 3 : -9);
+   *y = yoe + era * 400 + (*m <= 2);
+}
+
+/* Returns a pointer to field n (0 = sentence id) of the sentence at s, or
+ * NULL if the sentence ends first. */
+static char *nmea_field(char *s, char *end, int n)
+{
+   for (; n > 0 && s < end; s++) {
+      if (*s == '*' || *s == '\r' || *s == '\n') return NULL;
+      if (*s == ',') n--;
+   }
+   return n == 0 ? s : NULL;
+}
+
+static int nmea_digits(const char *p, int n)
+{
+   int v = 0;
+   for (int i = 0; i < n; i++) {
+      if (!isdigit((unsigned char) p[i])) return -1;
+      v = v * 10 + (p[i] - '0');
+   }
+   return v;
+}
+
+static void nmea_put_digits(char *p, int n, int v)
+{
+   for (int i = n - 1; i >= 0; i--, v /= 10) p[i] = '0' + v % 10;
+}
+
+/* The AMSS predates the April 2019 GPS week rollover and dates everything
+ * 1024 weeks in the past (see loc_eng_report_position). Fix the dates in
+ * $GPRMC (field 9, ddmmyy) and $GPZDA (fields 2-4, dd,mm,yyyy) in place
+ * (same width) and recompute the checksums. */
+static void loc_eng_fix_nmea_dates(char *buf, unsigned int len)
+{
+   static const long kLastRolloverDays = 17993;   /* 2019-04-07 */
+   char *end = buf + len;
+
+   for (char *s = buf; s < end; s++) {
+      if (*s != '$') continue;
+      int y, m, d;
+      char *dp = NULL, *mp = NULL, *yp = NULL;
+      int ylen = 2;
+      if (end - s > 6 && memcmp(s + 3, "RMC,", 4) == 0) {
+         char *f = nmea_field(s, end, 9);
+         if (f == NULL || end - f < 6 || f[6] != ',') continue;
+         dp = f; mp = f + 2; yp = f + 4;
+      } else if (end - s > 6 && memcmp(s + 3, "ZDA,", 4) == 0) {
+         dp = nmea_field(s, end, 2);
+         mp = nmea_field(s, end, 3);
+         yp = nmea_field(s, end, 4);
+         ylen = 4;
+         if (dp == NULL || mp == NULL || yp == NULL || end - yp < 4 ||
+             dp[2] != ',' || mp[2] != ',' || yp[4] != ',') continue;
+      } else {
+         continue;
+      }
+      d = nmea_digits(dp, 2);
+      m = nmea_digits(mp, 2);
+      y = nmea_digits(yp, ylen);
+      if (d < 1 || m < 1 || m > 12 || y < 0) continue;
+      if (ylen == 2) y += 2000;
+      long days = nmea_days_from_civil(y, m, d);
+      if (days >= kLastRolloverDays) continue;
+      nmea_civil_from_days(days + 1024 * 7, &y, &m, &d);
+      nmea_put_digits(dp, 2, d);
+      nmea_put_digits(mp, 2, m);
+      nmea_put_digits(yp, ylen, ylen == 2 ? y % 100 : y);
+
+      unsigned char sum = 0;
+      char *c = s + 1;
+      for (; c < end && *c != '*' && *c != '\r' && *c != '\n'; c++) sum ^= *c;
+      if (c + 2 < end && *c == '*' && isxdigit((unsigned char) c[1]) &&
+          isxdigit((unsigned char) c[2])) {
+         static const char hex[] = "0123456789ABCDEF";
+         c[1] = hex[sum >> 4];
+         c[2] = hex[sum & 0xf];
+      }
+   }
+}
+
 /*===========================================================================
 FUNCTION    loc_eng_report_nmea
 
@@ -1342,9 +1445,11 @@ static void loc_eng_report_nmea(const rpc_loc_nmea_report_s_type *nmea_report_pt
       LOC_LOGV("loc_eng_report_nmea: length=%u used=%u\n",
             (unsigned) nmea_report_ptr->length, nmea_len);
       if (nmea_len > 0) {
-         loc_eng_data.nmea_cb(now, nmea_report_ptr->nmea_sentences, nmea_len);
-         LOC_LOGD("loc_eng_report_nmea: %.*s\n", (int)nmea_len,
-               nmea_report_ptr->nmea_sentences);
+         char nmea[sizeof(nmea_report_ptr->nmea_sentences)];
+         memcpy(nmea, nmea_report_ptr->nmea_sentences, nmea_len);
+         loc_eng_fix_nmea_dates(nmea, nmea_len);
+         loc_eng_data.nmea_cb(now, nmea, nmea_len);
+         LOC_LOGD("loc_eng_report_nmea: %.*s\n", (int)nmea_len, nmea);
       }
 
 #endif /* #if (AMSS_VERSION==3200||AMSS_VERSION==20000) */
