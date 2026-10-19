@@ -21,6 +21,11 @@ Cambios para el Y210 (todos replican lo que hace el módulo stock):
 - `os/linux/ar6000_drv.c`: interfaz por defecto `eth0` (`wifi.c` carga el
   módulo sin argumentos); sin `ar6000_prealloc_init/deinit` cuando el kernel
   provee los buffers DMA (`ATH_PREALLOC_IN_KERNEL`).
+- `os/linux/include/wlan_config.h`: suspende en WoW (`WLAN_CONFIG_PM_SUSPEND
+  2`) como el stock. El default de RC.734 (`DEEP_SLEEP`) suelta la asociación
+  y el framework veía una desconexión en cada despertar. Sin red asociada
+  sigue cortando energía (`WLAN_CONFIG_PM_WOW2 0`). La IRQ de despertar
+  (GPIO 48) la maneja el board file, igual que con el stock.
 - `os/linux/Makefile`: no compila `prealloc/` con `ATH_PREALLOC_IN_KERNEL`
   (el board file ya exporta `ar6000_dma_buffer_alloc/free`).
 - `os/linux/ar6k_pal.c`: este kernel 2.6.38 de MSM sigue llamando
@@ -38,5 +43,7 @@ ahora sale del EEPROM del chip en vez de generarse al azar en cada arranque.
 - Suspensión real sin cable USB (con USB, `usb_bus_active` impide dormir):
   6 ciclos en ~8 min, `ar6000_suspend_ev`/`ar6000_resume_ev` en cada uno,
   0 errores `CMD5`/`card was removed`, WiFi conectado y con ping al
-  despertar. Es el bug del blob documentado en el `WIFI_NOTES.md` de CM7
+  despertar. Con `DEEP_SLEEP` (default de RC.734) cada despertar mostraba
+  `CTRL-EVENT-DISCONNECTED` y el ícono se iba; con WoW: 9 ciclos, 9
+  `Resume WoW successfully`, 0 desconexiones en logcat. Es el bug del blob documentado en el `WIFI_NOTES.md` de CM7
   (no pide `MMC_PM_KEEP_POWER`); `hif.c` de RC.734 sí lo hace.
