@@ -70,6 +70,11 @@ BOARD_DISABLE_HW_ID_MATCH_CHECK := true
 
 # OpenGL drivers config file path
 BOARD_EGL_CFG := device/huawei/y210/prebuilt/system/lib/egl/egl.cfg
+# hwui: GPU-accelerated drawing for app UIs (libhwui + GLES20Canvas).
+# Without it every app view is drawn in software even though
+# SurfaceFlinger and GL apps already run on the Adreno 200. ICS still
+# keeps persistent processes (SystemUI, Phone) in software on <512MB.
+USE_OPENGL_RENDERER := true
 BOARD_USES_QCOM_HARDWARE := true
 TARGET_USES_GENLOCK := true
 COMMON_GLOBAL_CFLAGS += -DQCOM_HARDWARE
