@@ -334,3 +334,13 @@ Claro con HSPA.
 
 Ojo: en builds `eng`, `IccCard` loguea el PIN en claro en el buffer `radio`
 (`Change Pin1 old: … new: …`), comportamiento de AOSP.
+
+Después de aceptar el PIN aparecía la pantalla "SIM network unlock PIN": el
+blob reporta ~1 s `app_state=SUBSCRIPTION_PERSO` con `perso_substate` 0
+(UNKNOWN) y luego 2 (READY) mientras revisa el bloqueo de operador, e
+`IccCard` de GB devuelve `NETWORK_LOCKED` para cualquier PERSO sin mirar el
+substate (`ENTER_NETWORK_DEPERSONALIZATION` además no está soportado).
+`ril/rilshim` reporta como `DETECTED` los PERSO con substate <= READY; los
+bloqueos reales (`SIM_NETWORK` en adelante) pasan sin tocar. Validado: PIN
+correcto → `READY`/`IMSI`/`LOADED` sin pantalla de red; PIN incorrecto →
+`PASSWORD_INCORRECT` del modem.

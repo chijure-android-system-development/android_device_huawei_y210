@@ -14,6 +14,12 @@
  * con data=NULL y el blob desreferencia NULL en qcril_uim_request_get_imsi.
  * El shim guarda el AID de la app GSM/USIM de GET_SIM_STATUS y lo agrega.
  *
+ * GET_SIM_STATUS, PERSO: despues de aceptar el PIN el blob reporta ~1 s
+ * app_state SUBSCRIPTION_PERSO con perso_substate IN_PROGRESS/READY mientras
+ * revisa el bloqueo de operador. IccCard de GB toma cualquier PERSO como
+ * NETWORK_LOCKED (no mira el substate) y mostraba "SIM network unlock PIN".
+ * El shim lo reporta como DETECTED; los bloqueos reales pasan tal cual.
+ *
  * PIN/PUK (ENTER_SIM_PIN/PUK/PIN2/PUK2, CHANGE_SIM_PIN/PIN2): en v6 llevan
  * el AID como ultimo string (el RIL.java stock de Huawei lo agrega). El de GB
  * no: ENTER_SIM_PIN con un solo string volvia REQUEST_NOT_SUPPORTED sin llegar
@@ -185,6 +191,7 @@ static void completeSimStatus(RIL_Token t, RIL_Errno e,
 {
     RIL_CardStatus status;
     int n = v6->num_applications;
+    int i;
 
     if (n < 0)
         n = 0;
@@ -198,6 +205,15 @@ static void completeSimStatus(RIL_Token t, RIL_Errno e,
     status.cdma_subscription_app_index = v6->cdma_subscription_app_index;
     status.num_applications = n;
     memcpy(status.applications, v6->applications, n * sizeof(RIL_AppStatus));
+    for (i = 0; i < n; i++) {
+        RIL_AppStatus *app = &status.applications[i];
+        if (app->app_state == RIL_APPSTATE_SUBSCRIPTION_PERSO &&
+                app->perso_substate <= RIL_PERSOSUBSTATE_READY) {
+            LOGD("GET_SIM_STATUS: app %d PERSO substate %d -> DETECTED",
+                 i, app->perso_substate);
+            app->app_state = RIL_APPSTATE_DETECTED;
+        }
+    }
     aidUpdate(v6, n);
 
     LOGD("GET_SIM_STATUS v6->v5: card=%d gsm=%d cdma=%d ims=%d apps=%d",
