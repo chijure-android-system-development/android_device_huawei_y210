@@ -304,7 +304,9 @@ xdr_rpc_loc_nmea_report_s_type (XDR *xdrs, rpc_loc_nmea_report_s_type *objp)
 	int i;
 	 if (!xdr_rpc_uint16 (xdrs, &objp->length))
 		 return FALSE;
-	 if (!xdr_opaque (xdrs, objp->nmea_sentences, 1200))
+	 /* 200 like the stock libloc_api-rpc-qc.so (B855): the modem encodes a
+	  * 200-byte opaque; decoding 1200 read past it and misaligned length. */
+	 if (!xdr_opaque (xdrs, objp->nmea_sentences, 200))
 		 return FALSE;
 	return TRUE;
 }
@@ -1484,7 +1486,6 @@ xdr_rpc_loc_ioctl_data_u_type (XDR *xdrs, rpc_loc_ioctl_data_u_type *objp)
 			 return FALSE;
 		break;
 	case RPC_LOC_IOCTL_SEND_WIPER_POSITION_REPORT:
-	case RPC_LOC_EVENT_NMEA_1HZ_REPORT:
 		 if (!xdr_rpc_loc_wiper_position_report_s_type (xdrs, &objp->rpc_loc_ioctl_data_u_type_u.wiper_pos))
 			 return FALSE;
 		break;
@@ -1612,6 +1613,11 @@ xdr_rpc_loc_event_payload_u_type (XDR *xdrs, rpc_loc_event_payload_u_type *objp)
 		 if (!xdr_rpc_loc_gnss_info_s_type (xdrs, &objp->rpc_loc_event_payload_u_type_u.gnss_report))
 			 return FALSE;
 		break;
+	/* The modem sends the 1 Hz NMEA event (the one loc_eng registers); the
+	 * stock libloc_api-rpc-qc.so decodes both NMEA events here. The 1HZ case
+	 * used to sit in the ioctl union, so its payload was never decoded and
+	 * every sentence arrived as zeros. */
+	case RPC_LOC_EVENT_NMEA_1HZ_REPORT:
 	case RPC_LOC_EVENT_NMEA_POSITION_REPORT:
 		 if (!xdr_rpc_loc_nmea_report_s_type (xdrs, &objp->rpc_loc_event_payload_u_type_u.nmea_report))
 			 return FALSE;

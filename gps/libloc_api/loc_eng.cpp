@@ -993,6 +993,15 @@ static void loc_eng_report_position(const rpc_loc_parsed_position_s_type *locati
          if (location_report_ptr->valid_mask & RPC_LOC_POS_VALID_TIMESTAMP_UTC)
          {
             location.timestamp = location_report_ptr->timestamp_utc;
+            /* GPS week rollover: this AMSS predates the April 2019 rollover
+             * and reports UTC exactly 1024 weeks in the past (a 2026 fix
+             * arrives dated 2007). No real fix can be older than that
+             * rollover, so move such timestamps forward by 1024 weeks. */
+            const GpsUtcTime kLastRolloverMs = 1554595200000LL;   /* 2019-04-07 */
+            const GpsUtcTime kGpsEpochMs = 1024LL * 7 * 24 * 3600 * 1000;
+            while (location.timestamp > 0 && location.timestamp < kLastRolloverMs) {
+               location.timestamp += kGpsEpochMs;
+            }
          }
 
          // Latitude & Longitude
@@ -1322,11 +1331,16 @@ static void loc_eng_report_nmea(const rpc_loc_nmea_report_s_type *nmea_report_pt
       loc_eng_data.nmea_cb(now, nmea_report_ptr->nmea_sentences.nmea_sentences_val,
             nmea_report_ptr->nmea_sentences.nmea_sentences_len);
 #else
-      /* length from the modem is not the sentence size on this AMSS:
-       * the log showed a lone '$' while the opaque buffer holds the
-       * text. Report up to the first NUL, capped at the array. */
-      unsigned int nmea_len = strnlen(nmea_report_ptr->nmea_sentences,
-            sizeof(nmea_report_ptr->nmea_sentences));
+      /* With the 200-byte XDR opaque (as in the stock library) the
+       * modem's length is meaningful again; fall back to the first NUL if
+       * it is out of range. */
+      unsigned int nmea_len = nmea_report_ptr->length;
+      if (nmea_len == 0 || nmea_len > sizeof(nmea_report_ptr->nmea_sentences)) {
+         nmea_len = strnlen(nmea_report_ptr->nmea_sentences,
+               sizeof(nmea_report_ptr->nmea_sentences));
+      }
+      LOC_LOGV("loc_eng_report_nmea: length=%u used=%u\n",
+            (unsigned) nmea_report_ptr->length, nmea_len);
       if (nmea_len > 0) {
          loc_eng_data.nmea_cb(now, nmea_report_ptr->nmea_sentences, nmea_len);
          LOC_LOGD("loc_eng_report_nmea: %.*s\n", (int)nmea_len,

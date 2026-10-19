@@ -166,9 +166,9 @@ typedef struct rpc_loc_gnss_info_s_type rpc_loc_gnss_info_s_type;
 
 struct rpc_loc_nmea_report_s_type {
 	rpc_uint16 length;
-	/* xdr_rpc_loc_nmea_report_s_type writes 1200 bytes (gen-50000).
-	 * A 200-byte array overflowed the event on every NMEA report. */
-	char nmea_sentences[1200];
+	/* 200 bytes, matching xdr_rpc_loc_nmea_report_s_type and the stock
+	 * libloc_api-rpc-qc.so (xdr_opaque(..., 200)). */
+	char nmea_sentences[200];
 };
 typedef struct rpc_loc_nmea_report_s_type rpc_loc_nmea_report_s_type;
 

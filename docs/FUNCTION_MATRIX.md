@@ -119,7 +119,8 @@ Actualizar esta tabla y el script cada vez que un bug se cierre con evidencia.
 - AGPS (UMTS SLP): **OK**
 - Fix real con satélites: **OK** (2026-07-10: prueba al aire libre en Lima, Perú — hasta 9 satélites detectados, coordenadas finales estables `-12.2944, -76.8588` vía `RPC_LOC_EVENT_PARSED_POSITION_REPORT`. Nota menor: las sentencias NMEA de texto (`loc_eng_report_nmea`) llegan vacías (solo `$`), no afecta al LocationManager pero cualquier app que dependa de NMEA crudo no tendría datos — no investigado más a fondo)
 
-- XDR de NMEA: **Pendiente** de corregir y validar. El stock decodifica `nmea_sentences` con 200 bytes (`libloc_api-rpc-qc.so`, misma versión RPC `0x00050001`); el `gen-50000` de CM7 usa 1200 y el buffer agrandado solo lo tapa. Requiere una sesión GPS activa para validar.
+- NMEA crudo (`nmea_cb`): **OK** (2026-10-19: `$GPGGA/GSA/GSV/RMC/VTG` completas, ~1 Hz. El evento `NMEA_1HZ_REPORT` no se decodificaba porque su `case` estaba en la unión de ioctl; ahora va en la de eventos como en el stock, con `nmea_sentences` de 200 bytes. Ver `GPS_NOTES.md`)
+- Fecha/hora de las ubicaciones: **OK** (2026-10-19: el módem reporta UTC 1024 semanas atrasado, rollover de semanas GPS de 2019; el HAL lo corrige)
 
 Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 

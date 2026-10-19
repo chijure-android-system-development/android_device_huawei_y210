@@ -108,3 +108,26 @@ NMEA de 1200 bytes y el reporte hasta el primer NUL ya aplicados. El
 `hardware/qcom/gps/Android.mk` no incluye nada y no hay módulos duplicados.
 La `gps.y210.so` resultante es idéntica byte a byte (md5 `dd61c1e3...`) a la
 que salía del árbol parcheado.
+
+## NMEA y fecha de las ubicaciones (2026-10-19)
+
+**NMEA vacío.** `loc_eng` registra `RPC_LOC_EVENT_NMEA_1HZ_REPORT` (`0x4`) y el
+módem manda ese evento, pero en `gen-50000/loc_api_common_xdr.c` (igual que en
+`hardware/qcom/gps` `c05e328`) el `case RPC_LOC_EVENT_NMEA_1HZ_REPORT` estaba en
+la unión de **ioctl** (pegado al wiper, código muerto: no hay ioctl 4) y no en
+`xdr_rpc_loc_event_payload_u_type`. El cuerpo del evento nunca se decodificaba y
+cada reporte llegaba con `length=0` y bytes en cero. En el stock
+(`libloc_api-rpc-qc.so` de B855) los eventos `0x4` y `0x8` saltan al mismo
+`bl xdr_rpc_loc_nmea_report_s_type`. Además `nmea_sentences` es de 200 bytes
+(`xdr_opaque(..., 200)` en el stock; `gen-50000` tenía 1200): es el único de los
+17 campos de tamaño fijo que difería. Con ambos cambios llegan `$GPGGA`,
+`$GPGSA`, `$GPGSV`, `$GPRMC` y `$GPVTG` completas y `loc_eng_report_nmea` usa
+otra vez el `length` del módem (con el primer NUL como respaldo).
+
+**Ubicaciones fechadas en 2007.** Con el NMEA se vio `$GPRMC` con fecha
+`050307`: el AMSS es anterior al rollover de semanas GPS de abril de 2019 y
+reporta UTC exactamente 1024 semanas atrás (`mTime` de una ubicación de octubre
+de 2026 = marzo de 2007). `loc_eng_report_position` suma 1024 semanas a los
+timestamps anteriores al 2019-04-07. Validado: `mTime=1792439563000`
+(2026-10-19). Las fechas dentro del texto NMEA (`$GPRMC`) siguen como las manda
+el módem.
