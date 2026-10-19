@@ -26,7 +26,6 @@
 #
 
 import /init.y210.rc
-import /init.mem.rc
 
 # vold mounts the external card onto /mnt/sdcard, so that mount point has to
 # exist as a real directory, and legacy apps expect /sdcard to exist as a
@@ -495,11 +494,12 @@ service qcom-wifi /system/bin/sh /system/etc/init.qcom.wifi.sh
 on property:init.svc.bootanim=stopped
     start qcom-wifi
     start qcom-post-boot
-    # Re-apply the 256 MB Y210 LMK profile after the core init.rc defaults.
-    write /sys/module/lowmemorykiller/parameters/adj 0,2,4,6,7,15
+    # LMK adj/minfree are left to ActivityManager (ProcessList): it derives
+    # them from RAM and screen size and uses the same levels for lowMemory.
+    # Overriding minfree with lower values here made AMS report lowMemory
+    # almost permanently (WebKit then refused allocations).
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
-    write /sys/module/lowmemorykiller/parameters/minfree 1536,2048,3072,4096,5120,6144
 
 service atfwd /system/bin/ATFWD-daemon
     user system

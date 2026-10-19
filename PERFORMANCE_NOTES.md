@@ -46,45 +46,37 @@ esperando respuesta del ARM9. Son normales para este SoC.
 
 ## LMK (Low Memory Killer)
 
-### Valores actuales (init.mem.rc — 2026-06-03)
+### Valores actuales (2026-10-18): los calcula ActivityManager
 
-Ajustados para los ~165 MB reales disponibles, no los 256 MB físicos:
-
-```
-minfree: 1536,2048,3072,5120,6144,8192   (en páginas de 4 KB)
-adj:     0,2,4,6,7,15
-```
-
-En MB equivalente:
-
-| Nivel | adj | Threshold | Qué proceso mata |
-|---|---|---|---|
-| Foreground | 0 | **6 MB** | App en primer plano (no tocar) |
-| Visible | 2 | **8 MB** | App visible pero no activa |
-| Perceptible | 4 | **12 MB** | App perceptible (música, etc.) |
-| Home | 6 | **20 MB** | Launcher |
-| Secondary | 7 | **24 MB** | Servicios secundarios |
-| Background | 15 | **32 MB** | Apps en background (principal mejora) |
-
-El threshold de background subió de 24 MB (original Huawei) a **32 MB** para
-forzar al LMK a liberar apps ociosas antes de que el sistema llegue al límite
-crítico de ~5 MB libre que producía la lentitud.
-
-### Archivos de configuración
-
-- `device/huawei/y210/prebuilt/init.mem.rc` — valores del LMK (ejecutado en `on boot`)
-- `device/huawei/y210/prebuilt/init.y210.rc` — NO contiene LMK (init.mem.rc lo sobreescribiría de todas formas)
-
-### Orden de ejecución de init
+El LMK ya no se fija desde init. En ICS, `ProcessList.updateOomLevels()`
+escribe `adj` y `minfree` al arrancar, a partir de la RAM total y el tamaño
+de pantalla. Para el Y210 (~165 MB, 320x480) da los valores mínimos de ICS:
 
 ```
-init.rc
-  └─ init.huawei.rc
-       ├─ init.y210.rc   (on boot ejecuta primero)
-       └─ init.mem.rc    (on boot ejecuta después → sus valores de LMK ganan)
+minfree: 2048,3072,4096,6144,7168,8192   (páginas de 4 KB = 8,12,16,24,28,32 MB)
 ```
 
-Por esto el LMK debe configurarse en `init.mem.rc`, no en `init.y210.rc`.
+Antes, `init.huawei.rc` (al terminar la bootanimation) e `init.mem.rc`
+pisaban `minfree` con valores propios (último `6144` = 24 MB). El problema
+es que AMS sigue usando *sus* niveles para decidir `MemoryInfo.lowMemory`
+(umbral de apps ocultas ≈ 28 MB): con el kernel matando recién a 20-24 MB,
+el sistema quedaba casi siempre por debajo del umbral de AMS y reportaba
+`lowMemory=true`. WebKit consulta ese flag (`canSatisfyMemoryAllocation`) y
+rechazaba asignaciones, lo que crasheaba el navegador con SVG. Se quitaron
+el override de `init.huawei.rc` e `init.mem.rc` (cuyos `ro.*_MEM` ICS
+ignora).
+
+### zram
+
+`ro.zram.default=18` (`system.prop`): `handle_compcache` de CM arma ~30 MB
+de swap comprimido en `/dev/block/zram0` (driver built-in) con
+`swappiness=30`.
+
+### Carveouts del kernel
+
+`pmem_gpu0`/`pmem_gpu1` (4 MB cada uno) se quitaron del board file: ningún
+blob Adreno referencia esos nodos (usan KGSL, `IOCTL_KGSL_GPMEM_ALLOC`) y
+ningún proceso los mapeaba. +8 MB para el sistema.
 
 ---
 
