@@ -317,3 +317,20 @@ símbolos en la propia librería, en `LD_PRELOAD` y en sus `DT_NEEDED`.
 `ril/Android.mk` es necesario: `all-makefiles-under` del `Android.mk` raíz
 solo baja un nivel, y sin él `ril/libril` y `ril/rilshim` no entran al build
 completo (solo compilaban con `mmm`).
+
+## PIN de SIM (2026-10-19)
+
+Con el bloqueo de SIM activo, el PIN al arrancar siempre daba "PIN
+incorrecto": `ENTER_SIM_PIN` volvía `REQUEST_NOT_SUPPORTED` en ~10 ms, sin
+llegar a la SIM (no gasta intentos). En v6 los pedidos de PIN/PUK llevan el AID
+como último string; el `RIL.java` stock de Huawei lo agrega en
+`supplyIccPin/Puk/Pin2/Puk2` y `changeIccPin/Pin2`, el de GB no.
+`HuaweiQualcommRIL` ya lo hacía para `SET/QUERY_FACILITY_LOCK` (por eso activar
+el bloqueo funcionaba), pero esa clase va dentro de `framework.jar`, que está
+odexado. `ril/rilshim` agrega el AID (el de la app GSM/USIM que guarda de
+`GET_SIM_STATUS`, también disponible con la SIM bloqueada) a esos seis
+pedidos. Validado: `ENTER_SIM_PIN {0}`, `LOCKED`→`READY`→`LOADED`, registro en
+Claro con HSPA.
+
+Ojo: en builds `eng`, `IccCard` loguea el PIN en claro en el buffer `radio`
+(`Change Pin1 old: … new: …`), comportamiento de AOSP.

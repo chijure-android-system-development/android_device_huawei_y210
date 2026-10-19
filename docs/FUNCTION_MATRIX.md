@@ -159,7 +159,7 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 - Estado de SIM / IMSI / SPN: **OK** (2026-10-18: `gsm.sim.state=READY`, `gsm.sim.operator.numeric=71610`, SPN "Claro" leído de la SIM; antes quedaba en `UNKNOWN` por el desfase RIL v6 — lo resuelve `ril/rilshim`)
 - Lista de APN en Ajustes sin parchear Settings: **OK** (2026-10-18; APN de Claro PE desde overlay de `framework-res`)
 - Datos con traducción v6 del shim: **OK** (2026-10-18: `SETUP_DATA_CALL {cid, rmnet0, ip}`, ciclo `svc data disable/enable`, ping/DNS)
-- PIN de SIM / bloqueo de SIM: **Pendiente** (sin probar con una SIM con PIN)
+- PIN de SIM / bloqueo de SIM: **OK** (2026-10-19: activar bloqueo, cambiar PIN e ingresar PIN al arrancar; `ENTER_SIM_PIN` volvía `REQUEST_NOT_SUPPORTED` sin el AID, lo agrega `ril/rilshim`)
 - IMEI (`service call iphonesubinfo 1`): **OK**
 - Llamadas (voz): **OK** (entrante/saliente)
 - SMS: **OK** (enviar/recibir)

@@ -14,6 +14,11 @@
  * con data=NULL y el blob desreferencia NULL en qcril_uim_request_get_imsi.
  * El shim guarda el AID de la app GSM/USIM de GET_SIM_STATUS y lo agrega.
  *
+ * PIN/PUK (ENTER_SIM_PIN/PUK/PIN2/PUK2, CHANGE_SIM_PIN/PIN2): en v6 llevan
+ * el AID como ultimo string (el RIL.java stock de Huawei lo agrega). El de GB
+ * no: ENTER_SIM_PIN con un solo string volvia REQUEST_NOT_SUPPORTED sin llegar
+ * a la SIM y el keyguard decia "PIN incorrecto". El shim agrega el AID.
+ *
  * SIM_IO: dispatchSIM_IO del stock hace memset de 40 bytes, deja la primera
  * palabra en 0, pone los campos de GB desde el offset 4 y aidPtr en el 36;
  * datalen 40 para version > 5. Con el RIL_SIM_IO de GB el blob leia el AID
@@ -379,9 +384,48 @@ static char **imsiArgsV6(const char *aid)
     return out;
 }
 
+/* PIN/PUK v6: los strings de GB con el AID agregado al final */
+static char **stringsWithAid(char **in, int n, const char *aid)
+{
+    char **out;
+    char *str;
+    size_t size = (n + 1) * sizeof(char *) + strSize(aid);
+    int i;
+
+    for (i = 0; i < n; i++)
+        size += strSize(in[i]);
+    out = malloc(size);
+    if (out == NULL)
+        return NULL;
+
+    str = (char *) (out + n + 1);
+    for (i = 0; i < n; i++)
+        out[i] = copyStr(&str, in[i]);
+    out[n] = copyStr(&str, aid);
+
+    return out;
+}
+
+/* cantidad de strings que manda el RIL.java de GB, sin AID */
+static int pinRequestStrings(int request)
+{
+    switch (request) {
+    case RIL_REQUEST_ENTER_SIM_PIN:
+    case RIL_REQUEST_ENTER_SIM_PIN2:
+        return 1;
+    case RIL_REQUEST_ENTER_SIM_PUK:
+    case RIL_REQUEST_ENTER_SIM_PUK2:
+    case RIL_REQUEST_CHANGE_SIM_PIN:
+    case RIL_REQUEST_CHANGE_SIM_PIN2:
+        return 2;
+    }
+    return 0;
+}
+
 static void shimOnRequest(int request, void *data, size_t datalen, RIL_Token t)
 {
     void *owned = NULL;
+    int n;
 
     switch (request) {
     case RIL_REQUEST_GET_SIM_STATUS:
@@ -396,6 +440,24 @@ static void shimOnRequest(int request, void *data, size_t datalen, RIL_Token t)
             if (owned != NULL) {
                 data = owned;
                 datalen = sizeof(char *);
+            }
+        }
+        pendingAdd(t, request, owned);
+        break;
+
+    case RIL_REQUEST_ENTER_SIM_PIN:
+    case RIL_REQUEST_ENTER_SIM_PUK:
+    case RIL_REQUEST_ENTER_SIM_PIN2:
+    case RIL_REQUEST_ENTER_SIM_PUK2:
+    case RIL_REQUEST_CHANGE_SIM_PIN:
+    case RIL_REQUEST_CHANGE_SIM_PIN2:
+        n = pinRequestStrings(request);
+        if (data != NULL && datalen == n * sizeof(char *) &&
+                aidGet() != NULL) {
+            owned = stringsWithAid((char **) data, n, aidGet());
+            if (owned != NULL) {
+                data = owned;
+                datalen = (n + 1) * sizeof(char *);
             }
         }
         pendingAdd(t, request, owned);
