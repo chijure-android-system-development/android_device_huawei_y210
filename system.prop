@@ -11,7 +11,9 @@ ro.telephony.ril_class=HuaweiY210RIL
 # perso_substate UNKNOWN/READY for about a second; without qcomuiccstack
 # IccCard takes any PERSO state as NETWORK_LOCKED and shows the "SIM network
 # unlock PIN" screen (seen on CM7). With it, only a real network lock does.
-ro.telephony.ril.v3=qcomuiccstack
+# signalstrength: qcril fills the LTE fields with 99/-32767 instead of -1, so
+# SignalStrength took the phone as LTE and showed 0 bars / -32767 dBm.
+ro.telephony.ril.v3=qcomuiccstack,signalstrength
 ril.subscription.types=NV,RUIM
 ro.baseband=msm
 ro.sf.lcd_density=160
