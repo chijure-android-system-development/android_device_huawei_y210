@@ -306,3 +306,24 @@ adb logcat -v time -d | grep -iE "copybit|libagl.*copy"
 # Framebuffer open + geometry
 adb logcat -v time -d | grep -i "y210.gralloc"
 ```
+
+## Bug: diálogos corruptos con hwui — hwui desactivado (2026-10-20)
+
+Con `USE_OPENGL_RENDERER` (commit `30d4676`, 2026-10-19) todos los diálogos de
+apps con hwui (Ajustes, conexión Wi-Fi, lista de Suspender) salían en mosaico
+~2.5x — la firma de un buffer de 320 px escrito con stride de 128 px, la misma
+que tuvo CM7 con el framebuffer — y con píxeles viejos en su zona transparente
+(copias de la barra de estado con la hora anterior). Las actividades a pantalla
+completa con hwui se veían bien, y los diálogos dibujados por software (panel de
+volumen en system_server) también.
+
+Descartado: panel/driver (logs limpios), composición (con el hwcomposer apagado,
+`service call SurfaceFlinger 1008 i32 1`, las pantallas normales se ven bien y
+el diálogo sigue roto), el teclado (en el navegador se ve bien) y el redibujado
+parcial de hwui (`hwui.render_dirty_regions=false` no cambia nada).
+
+Sin `USE_OPENGL_RENDERER` (y sin los `ro.hwui.*`) los diálogos salen bien
+(validado con Pantalla → Suspender). Las apps vuelven a dibujar por software,
+como antes del 2026-10-19; SurfaceFlinger y las apps GL siguen en el Adreno 200.
+Para volver a activarlo habría que encontrar por qué hwui del Adreno falla en
+ventanas que no son de pantalla completa.
