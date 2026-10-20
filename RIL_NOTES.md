@@ -229,3 +229,18 @@ Validación (post-boot)
 - Prueba conectividad:
   - `adb shell ping -c 2 -w 8 google.com`
   - Nota: algunos carriers filtran ICMP a `8.8.8.8`, no usarlo como prueba unica.
+
+## PIN de SIM en CM9 (2026-10-20)
+
+Con el bloqueo de SIM, el PIN al arrancar daba "PIN incorrecto" y `rild` se
+reiniciaba: SIGSEGV en `qcril_uim_request_enter_pin` (fault addr 0). El shim
+recibía `ENTER_SIM_PIN` con `data = NULL, datalen = 0`: `HuaweiRIL` (base de
+CM9 para otros Huawei) escribe `{writeString(null), pin}`; `libril` lee ese
+null como count `-1` y despacha un array NULL. `HuaweiY210RIL` ahora envía
+PIN/PUK/PIN2/PUK2 y los cambios de PIN en el formato estándar de ICS
+(`{n strings, aid}`, con `mAid` si el aid llega nulo), y `ril/rilshim` pone el
+AID guardado si falta o es nulo. El blob se caía antes de verificar, así que
+esos intentos no gastaron reintentos.
+
+Validado: `ENTER_SIM_PIN {0}`, `LOCKED`→`READY`→`IMSI`→`LOADED`, sin pantalla de
+red (con `ro.telephony.ril.v3=qcomuiccstack`), registro en Claro.

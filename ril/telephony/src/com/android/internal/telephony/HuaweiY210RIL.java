@@ -228,4 +228,69 @@ public class HuaweiY210RIL extends HuaweiRIL {
 
         send(rr);
     }
+
+    /*
+     * PIN/PUK in the standard ICS format ({n strings, aid}). HuaweiRIL sends
+     * {null, pin...} for other Huawei RILs: libril reads the null as a string
+     * count of -1, hands the blob a NULL array and qcril_uim_request_enter_pin
+     * crashes (rild restarts; the keyguard says the PIN is wrong).
+     */
+    private void sendPinStrings(int request, Message result, String... args) {
+        RILRequest rr = RILRequest.obtain(request, result);
+
+        if (RILJ_LOGD) riljLog(rr.serialString() + "> " + requestToString(rr.mRequest));
+
+        rr.mp.writeInt(args.length);
+        for (String arg : args) {
+            rr.mp.writeString(arg);
+        }
+
+        send(rr);
+    }
+
+    private String aidOrSim(String aid) {
+        return aid != null ? aid : mAid;
+    }
+
+    @Override
+    public void
+    supplyIccPin(String pin, Message result) {
+        sendPinStrings(RIL_REQUEST_ENTER_SIM_PIN, result, pin, mAid);
+    }
+
+    @Override
+    public void
+    supplyIccPinForApp(String pin, String aid, Message result) {
+        sendPinStrings(RIL_REQUEST_ENTER_SIM_PIN, result, pin, aidOrSim(aid));
+    }
+
+    @Override
+    public void
+    supplyIccPin2ForApp(String pin, String aid, Message result) {
+        sendPinStrings(RIL_REQUEST_ENTER_SIM_PIN2, result, pin, aidOrSim(aid));
+    }
+
+    @Override
+    public void
+    supplyIccPukForApp(String puk, String newPin, String aid, Message result) {
+        sendPinStrings(RIL_REQUEST_ENTER_SIM_PUK, result, puk, newPin, aidOrSim(aid));
+    }
+
+    @Override
+    public void
+    supplyIccPuk2ForApp(String puk, String newPin2, String aid, Message result) {
+        sendPinStrings(RIL_REQUEST_ENTER_SIM_PUK2, result, puk, newPin2, aidOrSim(aid));
+    }
+
+    @Override
+    public void
+    changeIccPinForApp(String oldPin, String newPin, String aid, Message result) {
+        sendPinStrings(RIL_REQUEST_CHANGE_SIM_PIN, result, oldPin, newPin, aidOrSim(aid));
+    }
+
+    @Override
+    public void
+    changeIccPin2ForApp(String oldPin2, String newPin2, String aid, Message result) {
+        sendPinStrings(RIL_REQUEST_CHANGE_SIM_PIN2, result, oldPin2, newPin2, aidOrSim(aid));
+    }
 }
