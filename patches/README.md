@@ -16,6 +16,7 @@ ya están aplicados (compara el asunto del commit).
 |---|---|---|
 | `frameworks/base` | reintento en `NoSuchAdapter` | Carrera dentro del event loop de Bluetooth del framework: `bluetoothd` se registra en D-Bus antes que `hci0`. |
 | `external/webkit` | `scratchContext` | Bug de WebKit: el navegador crashea con SVG cuando Android reporta poca memoria. |
+| `system/netd` | `SoftapControllerATH` | Hotspot del AR6003 (WEXT, `athap0`, hostapd stock). netd elige el controlador de SoftAP en su propio `Android.mk` y no carga código externo; el de ICS solo trae nl80211 y TI. |
 
 Resuelto fuera de los parches (2026-10-18/19):
 
