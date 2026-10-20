@@ -37,8 +37,9 @@ LOCAL_CFLAGS+=-DDEBUG
 
 LOCAL_CFLAGS+=-DADD_XDR_FLOAT -DADD_XDR_BOOL
 
+# No libcommondefs-rpc: nothing in the tree defines it (CM9 silently ignored
+# the missing static lib; JB needs its export_includes).
 LOCAL_SHARED_LIBRARIES:= librpc
-LOCAL_STATIC_LIBRARIES:= libcommondefs-rpc
 
 LOCAL_PRELINK_MODULE:= false
 

@@ -1,4 +1,4 @@
-From e1b3a019e0acfc402959dd5088032bcfd55b7553 Mon Sep 17 00:00:00 2001
+From 86353acb75e02267961fc777fe6cbd730be288d4 Mon Sep 17 00:00:00 2001
 From: Juan Manuel Reategui Solis <reateguisolisjm@gmail.com>
 Date: Tue, 20 Oct 2026 12:22:58 -0500
 Subject: [PATCH] netd: SoftAP for the Atheros AR6003 (SoftapControllerATH)
@@ -14,7 +14,9 @@ loaded; generatePsk and clientsSoftap (hostapd STA-FIRST/STA-NEXT) are
 added and wpa_ctrl_cleanup, gone from wpa_supplicant_8, is local.
 
 JB: the controller choice sits in the TI if/else chain of this netd's
-Android.mk, and the source uses the JB ALOGx macros.
+Android.mk, the source uses the JB ALOGx macros, and the local socket cleanup is
+renamed hostapd_ctrl_cleanup: JB's libwpa_client has wpa_ctrl_cleanup(), but
+it would also remove system_server's sockets.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Change-Id: I7be972d1110494747e4788a7016961a51377bcfb
@@ -45,7 +47,7 @@ index 95939df..103a145 100644
  endif
 diff --git a/SoftapControllerATH.cpp b/SoftapControllerATH.cpp
 new file mode 100644
-index 0000000..6779cbc
+index 0000000..d722dc3
 --- /dev/null
 +++ b/SoftapControllerATH.cpp
 @@ -0,0 +1,889 @@
@@ -283,11 +285,11 @@ index 0000000..6779cbc
 +}
 +
 +/*
-+ * wpa_supplicant_8's libwpa_client has no wpa_ctrl_cleanup(). Remove the
-+ * client sockets this process left behind (wpa_ctrl_<pid>-<n>) only, not
++ * Remove the client sockets this process left behind (wpa_ctrl_<pid>-<n>)
++ * only. libwpa_client's wpa_ctrl_cleanup() would also remove
 + * system_server's.
 + */
-+static void wpa_ctrl_cleanup(void)
++static void hostapd_ctrl_cleanup(void)
 +{
 +    char prefix[32], path[PATH_MAX];
 +    struct dirent *entry;
@@ -324,7 +326,7 @@ index 0000000..6779cbc
 +
 +
 +    /* Clear out any stale socket files that might be left over. */
-+    wpa_ctrl_cleanup();
++    hostapd_ctrl_cleanup();
 +
 +#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
 +    /*

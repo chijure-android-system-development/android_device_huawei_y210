@@ -24,7 +24,7 @@ JB ya crea ese contexto directamente en la rama `PLATFORM(ANDROID)`.
 
 El resto de la plataforma CM10 queda tal cual el manifest (sin los cambios
 MTK de los LG vee4ss/vee5ss, respaldados en
-`backups/tree-changes-20261020/`). `hardware/atheros/wlan` viene de
+`/mnt/fuentes/cm10-backups/tree-changes-20261020/`, fuera del árbol porque el build escanea todos los `Android.mk`). `hardware/atheros/wlan` viene de
 `.repo/local_manifests/y210.xml` (rama `jellybean` de CyanogenMod).
 
 Resuelto fuera de los parches (2026-10-18/20):
