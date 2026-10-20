@@ -83,7 +83,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 | Llamadas voz (downlink) | **OK** | |
 | Llamadas voz (uplink/mic) | **Parcial** | Requiere `send_mic_mute_to_AudioManager=true` en overlay |
 | A2DP / SCO Bluetooth | **Pendiente** | |
-| Radio FM — init | **Parcial** | `hw.fm.init=1` OK; audio pendiente de validar. Ver `FM_NOTES.md` |
+| Radio FM | **N/A (fuera de alcance)** | 2026-10-20: CM9 sale sin radio FM. No hay clases/JNI FM en el framework, ni app, ni audio FM en el HAL de ICS; meter el stack de CM7 traía muchos errores. Ver `FM_NOTES.md` |
 
 ### Wi-Fi
 
@@ -196,7 +196,7 @@ Estas apps suman ~100 MB de RAM comprometida sin ofrecer valor en este dispositi
 4. **hwcomposer** — desactivado por alineación de touch; investigar causa raíz.
 5. ~~**BatteryStats**~~ — resuelto: `xt_qtaguid` portado al kernel.
 6. **Audio uplink** — validar que el overlay `send_mic_mute_to_AudioManager` funciona en llamadas.
-7. **FM audio** — init OK, audio en auriculares pendiente.
+7. **FM** — fuera de alcance en CM9 (decisión 2026-10-20).
 8. **BT audio** — A2DP/SCO no validado.
 9. **GPS fix real** — motor OK, falta prueba al aire libre.
 
