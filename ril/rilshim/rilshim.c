@@ -11,6 +11,12 @@
  * qcril_uim_request_get_imsi. El shim guarda el AID de la app GSM/USIM de
  * GET_SIM_STATUS y lo agrega.
  *
+ * PIN/PUK (ENTER_SIM_PIN/PUK/PIN2/PUK2, CHANGE_SIM_PIN/PIN2): ICS manda el
+ * AID como ultimo string, pero supplyIccPin()/changeIccPin() sin app lo
+ * mandan NULL y el blob hace SIGSEGV en qcril_uim_request_enter_pin (el PIN
+ * al arrancar reiniciaba rild y el keyguard decia "PIN incorrecto"). El shim
+ * pone el AID guardado si falta o es NULL.
+ *
  * SIM_IO: el blob lee RIL_SIM_IO_v6 corrido una palabra (command en +4,
  * aidPtr en +36, 40 bytes). Con el struct de ICS leia el AID de la pila de
  * libril y crasheaba en vfprintf.
@@ -291,9 +297,48 @@ static char **imsiArgs(const char *aid)
     return out;
 }
 
+/* PIN/PUK: los n strings de entrada con el AID al final */
+static char **stringsWithAid(char **in, int n, const char *aid)
+{
+    char **out;
+    char *str;
+    size_t size = (n + 1) * sizeof(char *) + strSize(aid);
+    int i;
+
+    for (i = 0; i < n; i++)
+        size += strSize(in[i]);
+    out = malloc(size);
+    if (out == NULL)
+        return NULL;
+
+    str = (char *) (out + n + 1);
+    for (i = 0; i < n; i++)
+        out[i] = copyStr(&str, in[i]);
+    out[n] = copyStr(&str, aid);
+
+    return out;
+}
+
+/* strings de un pedido de PIN/PUK sin contar el AID */
+static int pinRequestStrings(int request)
+{
+    switch (request) {
+    case RIL_REQUEST_ENTER_SIM_PIN:
+    case RIL_REQUEST_ENTER_SIM_PIN2:
+        return 1;
+    case RIL_REQUEST_ENTER_SIM_PUK:
+    case RIL_REQUEST_ENTER_SIM_PUK2:
+    case RIL_REQUEST_CHANGE_SIM_PIN:
+    case RIL_REQUEST_CHANGE_SIM_PIN2:
+        return 2;
+    }
+    return 0;
+}
+
 static void shimOnRequest(int request, void *data, size_t datalen, RIL_Token t)
 {
     void *owned = NULL;
+    int n;
 
     switch (request) {
     case RIL_REQUEST_GET_SIM_STATUS:
@@ -308,6 +353,26 @@ static void shimOnRequest(int request, void *data, size_t datalen, RIL_Token t)
             if (owned != NULL) {
                 data = owned;
                 datalen = sizeof(char *);
+            }
+        }
+        pendingAdd(t, request, owned);
+        break;
+
+    case RIL_REQUEST_ENTER_SIM_PIN:
+    case RIL_REQUEST_ENTER_SIM_PUK:
+    case RIL_REQUEST_ENTER_SIM_PIN2:
+    case RIL_REQUEST_ENTER_SIM_PUK2:
+    case RIL_REQUEST_CHANGE_SIM_PIN:
+    case RIL_REQUEST_CHANGE_SIM_PIN2:
+        n = pinRequestStrings(request);
+        if (data != NULL && aidGet() != NULL &&
+                (datalen == n * sizeof(char *) ||
+                 (datalen == (n + 1) * sizeof(char *) &&
+                  ((char **) data)[n] == NULL))) {
+            owned = stringsWithAid((char **) data, n, aidGet());
+            if (owned != NULL) {
+                data = owned;
+                datalen = (n + 1) * sizeof(char *);
             }
         }
         pendingAdd(t, request, owned);
