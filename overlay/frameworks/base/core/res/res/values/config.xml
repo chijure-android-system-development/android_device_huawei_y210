@@ -3,5 +3,25 @@
 <resources>
     <!-- No working ALS on this target: keep auto-brightness UI/logic disabled. -->
     <bool name="config_automatic_brightness_available">false</bool>
+    <!-- Tethering (2026-10-20). Without these Settings hid the hotspot and
+         USB tethering. The AR6003 serves the AP on athap0 (netd
+         SoftapControllerATH reloads ar6000.ko with ifname=athap0). -->
+    <string-array translatable="false" name="config_tether_wifi_regexs">
+        <item>"athap0"</item>
+    </string-array>
+
+    <string-array translatable="false" name="config_tether_usb_regexs">
+        <item>"usb.*"</item>
+        <item>"rndis\\d"</item>
+    </string-array>
+
+    <!-- Upstream: mobile (0), Wi-Fi (1), mobile HIPRI (5). The ICS default
+         asks for MOBILE_DUN (4), which needs a "dun" APN Claro does not have. -->
+    <integer-array translatable="false" name="config_tether_upstream_types">
+        <item>0</item>
+        <item>1</item>
+        <item>5</item>
+    </integer-array>
+
 </resources>
 

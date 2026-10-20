@@ -6,7 +6,7 @@
 |---|---|
 | Encender / scan / asociar / DHCP | **OK** |
 | Redes persistentes (wpa_supplicant.conf) | **OK** |
-| Wi-Fi tethering (hotspot) | **No** (ver FUNCTION_MATRIX.md) |
+| Wi-Fi tethering (hotspot) | **OK** (ver abajo) |
 | Driver / firmware | AR6003 / ath6kl, interfaz `eth0` |
 
 El firmware del AR6003 se copia en `on post-fs-data` porque `wlan_detect` no
@@ -274,3 +274,24 @@ Implicación práctica:
   lo lanzaba `wifi.c` como `WIFI_PRE_LOADER`; el de ICS no tiene pre-loader y
   nadie lo arrancaba. `init.huawei.rc` lo arranca en `boot` y otra vez con
   `sys.boot_completed`. Validado: `ar6000: power tuned -2/6 -2/7 -2/5`.
+
+## Hotspot (2026-10-20)
+
+Nunca había funcionado en CM9 (la matriz decía OK por herencia de CM7):
+
+- Ajustes ocultaba la opción: el overlay no tenía `config_tether_wifi_regexs`
+  (`athap0`) ni `config_tether_usb_regexs`. `config_tether_upstream_types` va
+  en 0/1/5 (mobile, Wi-Fi, HIPRI): el default de ICS pide MOBILE_DUN y el APN
+  de Claro no tiene tipo `dun`.
+- netd de ICS solo tenía SoftAP nl80211/TI. `patches/system_netd` porta el
+  `SoftapControllerATH` del netd de CM7: recarga `ar6000.ko` con
+  `ifname=athap0` (ICS ya cargó el módulo en modo STA antes de
+  `softap start`), arranca el servicio `hostapd` (stock de Huawei) y le habla
+  por `wpa_ctrl`. `stopDriver` no descarga el módulo: lo hace el
+  `WifiStateMachine` y, si ya no estaba, quedaba en `DriverFailedState`.
+- `hostapd_y210.sh` (como CM7): `/dev/random` → `urandom` para el handshake y
+  borra el socket de control viejo antes de arrancar.
+
+Validado: `Softap startap - Ok`, `Tethered athap0`, cliente
+`AP-STA-CONNECTED` con DHCP 192.168.43.103, NAT sobre `rmnet0`; al apagarlo,
+`Untethered` y el Wi-Fi reconecta a la red guardada.
