@@ -1,0 +1,15 @@
+diff --git a/Android.mk b/Android.mk
+index 9091900..e4672fe 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -22,6 +22,10 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src)
+ LOCAL_PACKAGE_NAME := FileManager
+ LOCAL_JNI_SHARED_LIBRARIES := libaccess
+ 
++# user/userdebug builds run ProGuard, which fails on the Honeycomb+ classes
++# the bundled android-support-v2 references and Gingerbread does not have.
++LOCAL_PROGUARD_ENABLED := disabled
++
+ include $(BUILD_PACKAGE)
+ LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES := libandroid-support:libs/android-support-v2.jar
+ include $(BUILD_MULTI_PREBUILT)

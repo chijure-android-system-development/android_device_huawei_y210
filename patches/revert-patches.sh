@@ -56,6 +56,9 @@ revert_commits packages/apps/Camera 434f8777
 # packages/apps/FM — working tree
 revert_wt packages/apps/FM packages_apps_FM.patch
 
+# packages/apps/FileManager — working tree
+revert_wt packages/apps/FileManager packages_apps_FileManager_proguard.patch
+
 
 # vendor/cyanogen — working tree + archivo nuevo
 remove_new vendor/cyanogen/products/cyanogen_y210.mk

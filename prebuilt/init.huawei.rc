@@ -214,8 +214,9 @@ on post-fs
 
 on property:sys.boot_completed=1
     # Fix oncrpc node ownership/permissions after system is fully up
-    # toolbox `chown` expects user.group (or numeric ids). Use AID_QCOM_ONCRPC=3006.
-    exec /system/bin/sh -c "chown 0.3006 /dev/oncrpc/*; chmod 0660 /dev/oncrpc/*"
+    # toolbox `chown` expects user.group (or numeric ids): system (1000) owns
+    # them so system_server reaches them (GPS HAL), group AID_QCOM_ONCRPC=3006.
+    exec /system/bin/sh -c "chown 1000.3006 /dev/oncrpc/*; chmod 0660 /dev/oncrpc/*"
     # Restart RPC service after fixing perms
     # stop ril-daemon
     start oem_rpc_svc

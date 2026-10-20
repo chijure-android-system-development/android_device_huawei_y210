@@ -48,10 +48,9 @@ run_all() {
 #                   TextureManager (conversión NV21->RGB565 por software)
 apply frameworks/base                 frameworks_base_camera.patch
 
-# frameworks/base — Zygote: GID 3006 (AID_QCOM_ONCRPC) para system_server.
-#                   Lo de DataConnection/RIL.java/GsmDataConnectionTracker lo
-#                   resuelve ril/rilshim.
-apply frameworks/base                 frameworks_base_telephony.patch
+# frameworks/base — Zygote: GID 3006 para system_server — ya no se parchea:
+#   los nodos /dev/oncrpc/* son system:qcom_oncrpc (ueventd.huawei.rc e
+#   init.huawei.rc) y system_server llega como dueño (2026-10-20).
 
 # frameworks/base — PhoneFactory: rama faltante para instanciar HuaweiQualcommRIL
 #                   (ya vive en device/huawei/y210/ril/, inyectado via
@@ -110,6 +109,11 @@ apply packages/apps/Camera            packages_apps_Camera.patch
 # packages/apps/FM — app FM radio: FMRadio, FMRadioService, FmSharedPreferences
 #                    (config.xml: overlay/packages/apps/FM)
 apply packages/apps/FM                packages_apps_FM.patch
+
+# packages/apps/FileManager — builds user/userdebug: ProGuard falla con las
+#                   clases de Honeycomb que referencia android-support-v2.
+#                   Se desactiva ProGuard para esta app (como en eng).
+apply packages/apps/FileManager       packages_apps_FileManager_proguard.patch
 
 # hardware/qcom/gps — ya no se parchea: gps.y210 se compila desde gps/
 #                     (buffer NMEA de 1200 para AMSS 50000).

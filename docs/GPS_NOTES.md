@@ -25,17 +25,11 @@
 Los nodos `/dev/oncrpc/` tienen modo `0660` con grupo `qcom_oncrpc`, por lo que
 `clnt_create()` fallaba al abrir el socket RPC.
 
-**Fix:** `frameworks/base/core/java/com/android/internal/os/ZygoteInit.java` — agregar
-GID 3006 a la línea `--setgroups=` del lanzamiento de `system_server`:
-
-```java
-// Antes:
-"--setgroups=1001,1002,...,3001,3002,3003",
-// Después:
-"--setgroups=1001,1002,...,3001,3002,3003,3006",
-```
-
-Este fix va en `device/huawei/y210/patches/frameworks_base.patch`.
+**Fix (desde 2026-10-20):** los nodos `/dev/oncrpc/*` son de `system:qcom_oncrpc`
+(`prebuilt/ueventd.huawei.rc` y el `chown 1000.3006` de `init.huawei.rc`), así que
+`system_server` (uid 1000) los abre como dueño. Antes se agregaba el GID 3006 al
+`--setgroups=` de `system_server` en `ZygoteInit.java` (parche de plataforma,
+retirado).
 
 **Verificación:**
 ```bash

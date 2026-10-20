@@ -59,7 +59,9 @@
 /dev/pmem_adsp*           0660   system     audio
 /dev/pmem_smipool*        0660   system     camera
 /dev/pmem_camera*         0660   system     camera
-/dev/oncrpc/*             0660   root       qcom_oncrpc
+# owner system: system_server (GPS HAL) reaches the RPC nodes as owner, so
+# Zygote does not need qcom_oncrpc (3006) in its groups
+/dev/oncrpc/*             0660   system     qcom_oncrpc
 /dev/adsp/*               0660   system     audio
 /dev/snd/*                0660   system     audio
 /dev/mt9t013              0660   system     system
