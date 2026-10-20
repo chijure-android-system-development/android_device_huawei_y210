@@ -1,6 +1,6 @@
 # Huawei Y210 — Matriz de funciones CM9 (Android 4.0.4 ICS)
 
-Última actualización: 2026-06-06
+Última actualización: 2026-10-20
 
 Este documento es la fuente de verdad sobre el estado del port. Refleja CM9 (ICS).
 Los notes por área están en los archivos `*_NOTES.md` de este directorio.
@@ -23,7 +23,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 | GPU | Adreno 200 (Qualcomm) |
 | Pantalla | 320×480 HVGA, msmfb30 |
 | Touchscreen | Melfas MMS128 |
-| WiFi | AR6003 (ath6kl), interfaz `eth0` |
+| WiFi | AR6003, driver AR6kSDK 3.1 RC.734 compilado desde fuente (`wifi/AR6kSDK`), interfaz `eth0` |
 | Bluetooth | Qualcomm Bahama, HCI-IBS UART `/dev/ttyHS0` |
 | Cámara | Sensor OV5640 (blob Qualcomm QualcommCameraHardware) |
 | GPS | Integrado en ARM9, ONCRPC `LOC_APIPROG 0x3000008c` |
@@ -31,7 +31,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 
 ---
 
-## Matriz de estado (CM9 — 2026-06-06)
+## Matriz de estado (CM9 — 2026-10-20)
 
 ### Boot / sistema
 
@@ -51,8 +51,9 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 | Framebuffer / UI visible | **OK** | 320×480 60 Hz, 3 buffers |
 | SurfaceFlinger compositor | **OK** | `debug.sf.hw=1`; renderer Adreno 200 validado en boot |
 | GPU Adreno200 — driver | **OK** | Kernel con `IOCTL_KGSL_TIMESTAMP_EVENT`; sin errores genlock/KGSL en boot |
-| GPU Adreno200 — apps (HW GL) | **Parcial** | Gallery creó contexto EGL HW; falta prueba amplia de apps 3D |
-| hwcomposer | **No** | Desactivado: desalinea touch. SurfaceFlinger usa software |
+| GPU Adreno200 — apps (HW GL) | **OK** | QApp GPU benchmark: 18.4 FPS a 320×480, 5.4 FPS a 1280×720 (2026-10-20) |
+| hwui (UI de apps por GPU) | **Desactivado** | 2026-10-20: con hwui los diálogos salían en mosaico con restos; las apps dibujan por software. Ver `RENDER_NOTES.md` |
+| hwcomposer | **OK** | `hwcomposer.msm7x27a` activo con composición por GPU (`debug.composition.type=gpu`; copybit MDP falla en el Y210) |
 | Gralloc / copybit | **Parcial** | Local `gralloc.msm7x27a.so` con native handle CAF (`sNumFds=2`); no mezclar HALs e400/proprietarios |
 | Ghosting / SWAP_RECTANGLE | **OK** | Fix `fb_setUpdateRect_noop` — ver `RENDER_NOTES.md` |
 
@@ -89,7 +90,8 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 
 | Función | Estado | Nota |
 |---|---|---|
-| Encender / scan / asociar | **OK** | AR6003 / ath6kl, interfaz `eth0` |
+| Encender / scan / asociar | **OK** | AR6kSDK desde fuente, `eth0`; calibración de potencia de Huawei (`ar6000_cal_powerTuned`) |
+| Primer arranque tras wipe | **OK** | 2026-10-20: `wpa_supplicant.conf` system:wifi y `wlan_detect` desde init. Ver `WIFI_NOTES.md` |
 | DHCP | **OK** | |
 | Redes persistentes | **OK** | wpa_supplicant.conf no se sobreescribe en boot |
 | Wi-Fi tethering (hotspot) | **OK** | 2026-10-20: cliente asociado, DHCP 192.168.43.x, NAT sobre rmnet0; al apagarlo el Wi-Fi reconecta solo. `patches/system_netd` (SoftapControllerATH) + overlay de tethering + `hostapd_y210.sh` |
@@ -100,6 +102,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 |---|---|---|
 | Encender / HCI up | **OK** | `hci0 UP RUNNING` |
 | Pairing | **OK** | |
+| Tethering BT (NAP) | **OK** | `CONFIG_BT_BNEP` en el kernel (a43fc2a8) |
 | Audio BT (A2DP/SCO) | **Pendiente** | |
 
 ### Sensores
@@ -120,6 +123,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 | XTRA (efemérides asistidas) | **OK** | 41 partes inyectadas |
 | NTP / UTC injection | **OK** | |
 | AGPS (UMTS SLP) | **OK** | |
+| NMEA crudo y fechas | **Portado** | 2026-10-20: `gps/` del device tree con los arreglos de CM7 (evento NMEA 1 Hz, 200 bytes, rollover 2019) |
 | Fix real (satélites) | **Pendiente** | Requiere prueba al aire libre |
 
 Ver `GPS_NOTES.md` para detalles y bugs resueltos.
@@ -128,7 +132,9 @@ Ver `GPS_NOTES.md` para detalles y bugs resueltos.
 
 | Función | Estado | Nota |
 |---|---|---|
-| Camera HAL (ICS API) | **No** | El wrapper CM7 no es compatible con ICS CameraHardwareInterface. Requiere port. |
+| Preview | **OK** | `libcamera-caf` |
+| Foto | **OK** | JPEG codificado por software en SNAPSHOT_DONE (e0d5a25): el blob nunca manda JPEG_ENC_DONE |
+| Grabación de video | **Pendiente** | H.263 352×288 funcionó antes de la reducción de parches; sin re-probar |
 
 Ver `CAMERA_NOTES.md` para el análisis del wrapper CM7 y la estrategia de port a ICS.
 
@@ -149,6 +155,7 @@ Ver `CAMERA_NOTES.md` para el análisis del wrapper CM7 y la estrategia de port 
 | Llamadas (voz) | **OK** | Entrante y saliente |
 | SMS | **OK** | Enviar y recibir |
 | Datos móviles (rmnet0) | **OK** | HSPA; IP real validada |
+| PIN de SIM | **OK** | 2026-10-20: formato estándar de ICS en `HuaweiY210RIL` + AID en el shim; sin pantalla falsa de red (`qcomuiccstack`). Ver `RIL_NOTES.md` |
 
 Ver `RIL_NOTES.md` para arquitectura QCRIL y fixes de datos.
 
@@ -158,7 +165,7 @@ Ver `RIL_NOTES.md` para arquitectura QCRIL y fixes de datos.
 |---|---|---|
 | Suspensión / pantalla on-off | **OK** | `early_suspend`/`late_resume` OK |
 | Deep sleep | **OK** | WiFi WoW, wakeup periódico modem normal |
-| RAM disponible (baseline) | ~15 MB libres | Tras deshabilitar apps innecesarias |
+| RAM | ~178 MB totales | Sin `pmem_gpu0/1` (+8 MB), zram 18 %, LMK manejado por ActivityManager. Ver `PERFORMANCE_NOTES.md` |
 | LMK | Ajustado | 32 MB threshold para apps fondo. Ver `PERFORMANCE_NOTES.md` |
 
 ### Sistema de salud / misc
@@ -190,15 +197,16 @@ Estas apps suman ~100 MB de RAM comprometida sin ofrecer valor en este dispositi
 
 ## Bugs pendientes (por prioridad)
 
-1. **Camera HAL** — port del wrapper a ICS CameraHardwareInterface. Bloqueante para cámara.
+1. ~~**Camera HAL**~~ — resuelto: preview y foto (e0d5a25). Falta re-probar video.
 2. ~~**Screenshot (power menu)**~~ — resuelto con ruta HW EGL/Adreno; PixelFlinger/software sigue sin FBO.
-3. **GPU HW GL / Adreno EGL** — boot HW validado; falta prueba amplia de apps 3D y estabilidad prolongada.
-4. **hwcomposer** — desactivado por alineación de touch; investigar causa raíz.
+3. ~~**GPU HW GL / Adreno EGL**~~ — validado con QApp (18.4 FPS). hwui desactivado por los diálogos.
+4. ~~**hwcomposer**~~ — activo con composición por GPU.
 5. ~~**BatteryStats**~~ — resuelto: `xt_qtaguid` portado al kernel.
 6. **Audio uplink** — validar que el overlay `send_mic_mute_to_AudioManager` funciona en llamadas.
 7. **FM** — fuera de alcance en CM9 (decisión 2026-10-20).
 8. **BT audio** — A2DP/SCO no validado.
 9. **GPS fix real** — motor OK, falta prueba al aire libre.
+10. **Arranque con cargador** — si el bootloader pasa `androidboot.battchg_pause`, init carga `/lpm.rc`, que no existe en el ramdisk, y se queda en el logo. Encender sin el cable USB.
 
 ---
 
