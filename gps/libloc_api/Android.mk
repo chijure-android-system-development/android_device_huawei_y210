@@ -59,6 +59,9 @@ LOCAL_C_INCLUDES:= \
 
 LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+# JB libhardware writes hmi->dso into HAL_MODULE_INFO_SYM; under RELRO that
+# page is read-only and system_server SIGSEGVs (SEGV_ACCERR) loading gps.y210.
+LOCAL_LDFLAGS += -Wl,-z,norelro
 
 LOCAL_MODULE_TAGS := optional
 
