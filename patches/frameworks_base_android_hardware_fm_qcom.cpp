@@ -12,7 +12,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/videodev2.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -134,6 +136,65 @@ static jint v4l2ToKhz(uint32_t freq, bool lowUnits)
     return static_cast<jint>(freq);
 }
 
+// Event listener threads (FmRxEventListner) loop forever on the fd they were
+// started with and cannot be stopped (unregisterClient uses Thread.stop(),
+// unsupported on Dalvik), but FMRadioService.fmOff() closes that fd. The
+// thread then spun on VIDIOC_DQBUF errors, or read the events of a later
+// session whose fd got the same number. Track a generation per fd number:
+// a listener whose fd was closed or reopened since its first call is parked.
+#define FM_MAX_FDS 1024
+static unsigned int sFdGen[FM_MAX_FDS];
+static pthread_mutex_t sFdLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_key_t sListenerKey;
+static pthread_once_t sListenerOnce = PTHREAD_ONCE_INIT;
+
+struct ListenerFd {
+    int fd;
+    unsigned int gen;
+};
+
+static void listenerKeyInit()
+{
+    pthread_key_create(&sListenerKey, free);
+}
+
+static void fdOpened(int fd)
+{
+    if (fd < 0 || fd >= FM_MAX_FDS) return;
+    pthread_mutex_lock(&sFdLock);
+    // even: closed, odd: open
+    if ((sFdGen[fd] & 1) == 0) sFdGen[fd]++;
+    pthread_mutex_unlock(&sFdLock);
+}
+
+static void fdClosed(int fd)
+{
+    if (fd < 0 || fd >= FM_MAX_FDS) return;
+    pthread_mutex_lock(&sFdLock);
+    if (sFdGen[fd] & 1) sFdGen[fd]++;
+    pthread_mutex_unlock(&sFdLock);
+}
+
+// true if this thread's listener fd was closed (or reopened) since it started
+static bool listenerIsStale(int fd)
+{
+    if (fd < 0 || fd >= FM_MAX_FDS) return false;
+    pthread_once(&sListenerOnce, listenerKeyInit);
+    pthread_mutex_lock(&sFdLock);
+    unsigned int gen = sFdGen[fd];
+    pthread_mutex_unlock(&sFdLock);
+
+    ListenerFd* l = (ListenerFd*) pthread_getspecific(sListenerKey);
+    if (l == NULL) {
+        l = (ListenerFd*) malloc(sizeof(*l));
+        if (l == NULL) return false;
+        l->fd = fd;
+        l->gen = gen;
+        pthread_setspecific(sListenerKey, l);
+    }
+    return l->fd != fd || l->gen != gen || (gen & 1) == 0;
+}
+
 static jint fmAcquireFdNative(JNIEnv* env, jobject /*thiz*/, jstring path)
 {
     if (path == NULL) {
@@ -165,12 +226,14 @@ static jint fmAcquireFdNative(JNIEnv* env, jobject /*thiz*/, jstring path)
     }
 
     env->ReleaseStringUTFChars(path, nativePath);
+    fdOpened(fd);
     return fd;
 }
 
 static jint fmCloseFdNative(JNIEnv* /*env*/, jobject /*thiz*/, jint fd)
 {
     if (fd < 0) return FM_JNI_FAILURE;
+    fdClosed(fd);
     return close(fd);
 }
 
@@ -324,6 +387,12 @@ static jint fmGetLowerBandNative(JNIEnv* /*env*/, jobject /*thiz*/, jint /*fd*/)
 static jint fmGetBufferNative(JNIEnv* env, jobject /*thiz*/, jint fd, jbyteArray buff, jint /*index*/)
 {
     if (fd < 0 || buff == NULL) return FM_JNI_FAILURE;
+    if (listenerIsStale(fd)) {
+        // The receiver that started this thread was released. Park it for
+        // good: it cannot exit, and it must not read another session's events.
+        LOGI("event listener on released fd %d parked", fd);
+        for (;;) sleep(3600);
+    }
     jsize len = env->GetArrayLength(buff);
     if (len <= 0) return 0;
     jbyte* bytes = env->GetByteArrayElements(buff, NULL);

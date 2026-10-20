@@ -1402,7 +1402,28 @@ Boot images: `~/y210_kernel_backups/boot-cm7-968abe96-20261019.img` (el que va
 en la ROM, md5 `1ba161bc…`) y `boot-cm7-fm-seekdown-wip-20261019.img` (#17).
 Para volver: `flash_image` + `dump_image`/`cmp` (ver `KERNEL_NOTES.md`).
 
-**Bug aparte visto en la prueba:** si la app enciende la radio sin audífonos
-y luego se conectan, el lector de eventos queda en bucle con `VIDIOC_DQBUF
-failed: Invalid argument` (`Received <0> event`) y la radio no responde hasta
-reiniciar. Sin investigar.
+## Radio encendida sin audífonos (2026-10-19, corregido)
+
+Al abrir la app sin audífonos: `onServiceConnected` y `onResume` llamaban los
+dos a `enableRadio()`, y los dos `fmOn()` creaban su `FmReceiver` (dos fd de
+fminit, dos hilos de eventos) aunque no hubiera antena. Al ver que no había
+antena, los dos `onPostExecute` llamaban a `disableRadio()`; el segundo
+llegaba con `mReceiver` ya en null (`fmOff()` lo suelta) y
+`cancelSearch()`→`updateSearchProgress()`→`getFreq()` tiraba un
+NullPointerException (cierre forzado). Además, `fmOff()` cierra el fd pero el
+hilo de `FmRxEventListner` sigue en `while(true)` con ese número de fd
+(`unregisterClient()` usa `Thread.stop()`, no soportado en Dalvik): giraba con
+`VIDIOC_DQBUF failed: Invalid argument` o, si el fd nuevo recibía el mismo
+número, leía eventos de la sesión siguiente.
+
+- App (`packages_apps_FM.patch`): `enableRadio()` no enciende sin antena (solo
+  el aviso) e ignora una llamada mientras otra está en curso;
+  `FMRadioService.getFreq()` devuelve la frecuencia guardada si no hay
+  receptor.
+- JNI (`fmGetBufferNative`): generación por número de fd (se incrementa al
+  abrir y al cerrar); un hilo de eventos cuyo fd se cerró o reabrió desde su
+  primera llamada se duerme para siempre (`event listener on released fd N
+  parked`). No se puede terminar sin tocar el framework, que está odexado.
+
+Validado: sin audífonos solo avisa (sin cierre forzado); con audífonos
+enciende; apagar y encender reusa el fd 45 y el hilo viejo queda dormido.

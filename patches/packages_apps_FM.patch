@@ -1,12 +1,22 @@
 diff --git a/src/com/android/fm/radio/FMRadio.java b/src/com/android/fm/radio/FMRadio.java
-index f5ffb0a..aeb09ed 100644
+index f5ffb0a..88a000a 100644
 --- a/src/com/android/fm/radio/FMRadio.java
 +++ b/src/com/android/fm/radio/FMRadio.java
-@@ -898,48 +898,59 @@ public class FMRadio extends Activity {
+@@ -897,49 +897,83 @@ public class FMRadio extends Activity {
+         }
      }
  
++    // An enable is running in the AsyncTask below. onServiceConnected and
++    // onResume both call enableRadio(); without this both reached fmOn() and
++    // created two receivers (two fds, two event listener threads).
++    private boolean mEnabling = false;
++
      private void enableRadio() {
 +        Log.e(LOGTAG, "enableRadio: entered");
++        if (mEnabling) {
++            Log.d(LOGTAG, "enableRadio: already enabling");
++            return;
++        }
          mIsScaning = false;
          mIsSeeking = false;
          mIsSearching = false;
@@ -15,6 +25,18 @@ index f5ffb0a..aeb09ed 100644
 -        if (mService != null) {
 -            try {
 +        if (mService == null) { Log.e(LOGTAG, "enableRadio: mService null, abort"); return; }
++
++        // The headset cable is the antenna: do not turn the chip on without it
++        // (it was enabled and then immediately disabled again).
++        if (!isAntennaAvailable()) {
++            Toast toast = Toast.makeText(FMRadio.this,
++                    getString(R.string.need_headset_for_antenna),
++                    Toast.LENGTH_LONG);
++            toast.setGravity(Gravity.TOP | Gravity.CENTER, 0, 240);
++            toast.show();
++            enableRadioOnOffUI();
++            return;
++        }
  
 -                boolean radioOn = mService.isFmOn();
 +        // Capture pre-enable state on UI thread before going async.
@@ -32,6 +54,7 @@ index f5ffb0a..aeb09ed 100644
 -                int vol = AudioSystem.getStreamVolumeIndex(AudioSystem.STREAM_FM);
 -                AudioSystem.setStreamVolumeIndex(AudioSystem.STREAM_FM, vol);
 +        Log.e(LOGTAG, "enableRadio: launching AsyncTask");
++        mEnabling = true;
  
 -                if (!isPhoneInCall()) {
 -                    mService.unMute();
@@ -54,6 +77,7 @@ index f5ffb0a..aeb09ed 100644
  
 +            @Override
 +            protected void onPostExecute(Boolean bStatus) {
++                mEnabling = false;
                  if (bStatus) {
                      if (isAntennaAvailable()) {
                          mFreqIndicator.setFrequency(FmSharedPreferences.getTunedFrequency());
@@ -85,7 +109,7 @@ index f5ffb0a..aeb09ed 100644
                                  getString(R.string.need_headset_for_antenna),
                                  Toast.LENGTH_LONG);
                          toast.setGravity(Gravity.TOP | Gravity.CENTER, 0, 240);
-@@ -947,14 +958,12 @@ public class FMRadio extends Activity {
+@@ -947,14 +981,12 @@ public class FMRadio extends Activity {
                          disableRadio();
                      }
                  } else {
@@ -103,7 +127,7 @@ index f5ffb0a..aeb09ed 100644
  
      private void disableRadio() {
 diff --git a/src/com/android/fm/radio/FMRadioService.java b/src/com/android/fm/radio/FMRadioService.java
-index b849063..b1a3fb6 100644
+index b849063..86eeb0f 100644
 --- a/src/com/android/fm/radio/FMRadioService.java
 +++ b/src/com/android/fm/radio/FMRadioService.java
 @@ -30,6 +30,7 @@ import android.util.Log;
@@ -209,7 +233,18 @@ index b849063..b1a3fb6 100644
                  bStatus = true;
              } else {
                  stop();
-@@ -1424,6 +1451,22 @@ public class FMRadioService extends Service {
+@@ -1012,6 +1039,10 @@ public class FMRadioService extends Service {
+      * @return freq value currently tuned
+      */
+     public int getFreq() {
++        // mReceiver is null while FM is off (fmOff() releases it)
++        if (mReceiver == null) {
++            return FmSharedPreferences.getTunedFrequency();
++        }
+ 	return mReceiver.getTunedFrequency();
+     }
+ 
+@@ -1424,6 +1455,22 @@ public class FMRadioService extends Service {
              } catch (RemoteException e) {
                  e.printStackTrace();
              }

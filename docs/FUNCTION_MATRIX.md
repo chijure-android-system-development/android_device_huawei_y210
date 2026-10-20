@@ -151,7 +151,7 @@ Ver `device/huawei/y210/GPS_NOTES.md` para diagnóstico y bugs resueltos.
 
 - Búsqueda de FM hacia arriba: **OK** (2026-10-19: umbral RMSSI corregido en el JNI, 0.5–1.8 s por emisora)
 - Búsqueda de FM hacia abajo: **Parcial** (firmware no se detiene hacia abajo; emulación en kernel WIP, rama `fm-seekdown-wip`; ver `FM_NOTES.md` 2026-10-19)
-- FM encendida sin audífonos y luego conectados: **No** (bucle `VIDIOC_DQBUF ... Invalid argument`, hay que reiniciar; ver `FM_NOTES.md`)
+- FM encendida sin audífonos y luego conectados: **OK** (2026-10-19: sin audífonos solo avisa; con ellos enciende; ciclos off/on sin bucle de eventos; ver `FM_NOTES.md`)
 
 ### Radio / Telefonía (RIL)
 
