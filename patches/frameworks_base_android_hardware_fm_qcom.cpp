@@ -409,7 +409,10 @@ static jint fmGetBufferNative(JNIEnv* env, jobject /*thiz*/, jint fd, jbyteArray
     v4l2buf.index = TAVARUA_BUF_EVENTS;
     v4l2buf.memory = V4L2_MEMORY_USERPTR;
     v4l2buf.m.userptr = (unsigned long)bytes;
-    v4l2buf.length = (uint32_t)len;
+    // One event per call: DQBUF hands out every queued event at once, but
+    // FmRxEventListner only dispatches buff[0], so the rest were lost (e.g.
+    // SEEK_COMPLETE queued right after TUNE/ABOVE_TH/STEREO/RDS).
+    v4l2buf.length = 1;
 
     int r;
     if (ioctl(fd, VIDIOC_DQBUF, &v4l2buf) < 0) {

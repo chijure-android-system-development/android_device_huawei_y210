@@ -16,9 +16,12 @@ del equipo) y agrega `SWAP`, `ZRAM`, `LZO`, kernel `LZMA`, `TUN` y MTP. El
 
 `device/huawei/y210/kernel` (`TARGET_PREBUILT_KERNEL`) es, desde
 2026-10-18, el zImage compilado de github.com/chijure/android_kernel_huawei_y210
-en el commit `968abe96` con `y210_defconfig` (md5
-`3993a0e47c34d5e423dccfbc6ee8f3e1`). El anterior era el zImage stock de Huawei
-(está en el historial de git). Al actualizarlo, anotar el commit y el md5 acá.
+con `y210_defconfig`. Al actualizarlo, anotar el commit y el md5 acá.
+
+| Fecha | Commit | md5 | Cambio |
+|---|---|---|---|
+| 2026-10-18 | `968abe96` | `3993a0e47c34d5e423dccfbc6ee8f3e1` | primer kernel propio (antes, el zImage stock de Huawei, en el historial de git) |
+| 2026-10-19 | `8efe2f16` | `d36ffffc7f9ef9c4fa9346ebedd6387e` | radio-tavarua: búsqueda FM hacia abajo emulada (ver `FM_NOTES.md`) |
 
 ## Compilar
 
@@ -128,3 +131,4 @@ recuperó flasheando el boot anterior desde TWRP). Probablemente el tope de la
 RAM de Linux no está libre en esta placa o correr las reservas de pmem rompe
 algo. Para reintentarlo hace falta consola serie o elegir una región que se
 sepa libre (no el tope de DRAM). El zImage del device tree no cambió.
+| `8efe2f16` | `radio-tavarua`: búsqueda hacia abajo emulada con búsquedas hacia arriba (el firmware barre sin detenerse hacia abajo) | 95.1→94.4 en 1 s; ver `FM_NOTES.md` |
