@@ -15,6 +15,12 @@
         <item>"rndis\\d"</item>
     </string-array>
 
+    <!-- netd's SoftapControllerATH reloads ar6000.ko with ifname=athap0 on
+         "softap start". CM9 always sent it; CM10 only does with this flag,
+         otherwise hostapd finds no athap0 ("ar6000 driver initialization
+         failed") and the hotspot never starts. -->
+    <bool name="config_wifiApStartInterface">true</bool>
+
     <!-- Upstream: mobile (0), Wi-Fi (1), mobile HIPRI (5). The ICS default
          asks for MOBILE_DUN (4), which needs a "dun" APN Claro does not have. -->
     <integer-array translatable="false" name="config_tether_upstream_types">
