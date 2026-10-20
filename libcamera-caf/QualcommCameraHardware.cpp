@@ -274,6 +274,19 @@ static camera_size_type* hfr_sizes;
 static unsigned int PICTURE_SIZE_COUNT;
 static const camera_size_type * picture_sizes_ptr;
 static int supportedPictureSizesCount;
+
+/*
+ * Y210: liboemcamera reports snapshot sizes up to 4000x3000. JB's Camera
+ * picks the largest size it knows: the 4000x3000 raw buffer (18 MB) cannot
+ * fit the 12 MB pmem_adsp carveout of a 256 MB MSM7x27A (mmap fails,
+ * register_buffers returns EPERM, empty photo), and at 2592x1944 or
+ * 2048x1536 the blob still delivers a 1600x1200 frame, so the JPEG comes
+ * out as stripes. 1600x1200 is also what CM9 validated. Only offer sizes
+ * the blob really delivers.
+ */
+#define Y210_MAX_SNAPSHOT_WIDTH  1600
+#define Y210_MAX_SNAPSHOT_HEIGHT 1200
+static camera_size_type y210_picture_sizes[32];
 static liveshotState liveshot_state = LIVESHOT_DONE;
 
 #ifdef Q12
@@ -2247,6 +2260,23 @@ bool QualcommCameraHardware::startCamera()
         return false;
     }
      ALOGV("startCamera picture_sizes %p PICTURE_SIZE_COUNT %d", picture_sizes, PICTURE_SIZE_COUNT);
+    {
+        unsigned int i, n = 0;
+        for (i = 0; i < PICTURE_SIZE_COUNT &&
+                n < sizeof(y210_picture_sizes) / sizeof(y210_picture_sizes[0]); i++) {
+            if (picture_sizes[i].width > Y210_MAX_SNAPSHOT_WIDTH ||
+                    picture_sizes[i].height > Y210_MAX_SNAPSHOT_HEIGHT) {
+                ALOGI("Y210: dropping snapshot size %dx%d (above the sensor)",
+                      picture_sizes[i].width, picture_sizes[i].height);
+                continue;
+            }
+            y210_picture_sizes[n++] = picture_sizes[i];
+        }
+        if (n > 0) {
+            picture_sizes = y210_picture_sizes;
+            PICTURE_SIZE_COUNT = n;
+        }
+    }
     mCfgControl.mm_camera_query_parms(CAMERA_PARM_PREVIEW_SIZE, (void **)&preview_sizes, &PREVIEW_SIZE_COUNT);
     if ((preview_sizes == NULL) || (!PREVIEW_SIZE_COUNT)) {
         ALOGE("startCamera X: could not get preview sizes");
