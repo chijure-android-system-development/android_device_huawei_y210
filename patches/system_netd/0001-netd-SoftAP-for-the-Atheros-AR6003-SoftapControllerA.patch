@@ -1,6 +1,6 @@
-From 76b2dfb519a037f74302947d22ba4126babc7651 Mon Sep 17 00:00:00 2001
+From e1b3a019e0acfc402959dd5088032bcfd55b7553 Mon Sep 17 00:00:00 2001
 From: Juan Manuel Reategui Solis <reateguisolisjm@gmail.com>
-Date: Tue, 20 Oct 2026 09:36:30 -0500
+Date: Tue, 20 Oct 2026 12:22:58 -0500
 Subject: [PATCH] netd: SoftAP for the Atheros AR6003 (SoftapControllerATH)
 
 CyanogenMod's gingerbread netd drove the ar6000 hotspot with
@@ -13,8 +13,11 @@ driver in STA mode before "softap start" and unloads it itself after
 loaded; generatePsk and clientsSoftap (hostapd STA-FIRST/STA-NEXT) are
 added and wpa_ctrl_cleanup, gone from wpa_supplicant_8, is local.
 
+JB: the controller choice sits in the TI if/else chain of this netd's
+Android.mk, and the source uses the JB ALOGx macros.
+
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Change-Id: I2be5f070d1cdfdcf679817ef94b761353ca7484a
+Change-Id: I7be972d1110494747e4788a7016961a51377bcfb
 ---
  Android.mk              |   8 +
  SoftapControllerATH.cpp | 889 ++++++++++++++++++++++++++++++++++++++++
@@ -22,27 +25,27 @@ Change-Id: I2be5f070d1cdfdcf679817ef94b761353ca7484a
  create mode 100644 SoftapControllerATH.cpp
 
 diff --git a/Android.mk b/Android.mk
-index c09b634..a701ac5 100644
+index 95939df..103a145 100644
 --- a/Android.mk
 +++ b/Android.mk
-@@ -40,6 +40,14 @@ ifdef BOARD_SOFTAP_DEVICE_TI
-     LOCAL_SRC_FILES += SoftapControllerTI.cpp
-     LOCAL_C_INCLUDES += external/libnl-headers
-     LOCAL_STATIC_LIBRARIES += libnl_2
-+else ifeq ($(WIFI_DRIVER_MODULE_NAME),ar6000)
-+    # Atheros AR6003 (ar6000.ko, WEXT, hostapd on athap0)
-+    ifneq ($(WIFI_DRIVER_MODULE_PATH),rfkill)
-+        LOCAL_CFLAGS += -DWIFI_MODULE_PATH=\"$(WIFI_DRIVER_MODULE_PATH)\"
-+    endif
-+    LOCAL_SRC_FILES += SoftapControllerATH.cpp
-+    LOCAL_C_INCLUDES += external/wpa_supplicant_8/src/common
-+    LOCAL_SHARED_LIBRARIES += libwpa_client
+@@ -46,6 +46,14 @@ ifeq ($(BOARD_TI_SOFTAP),true)
  else
-     LOCAL_SRC_FILES += SoftapController.cpp
+ ifeq ($(USES_TI_MAC80211),true)
+   LOCAL_SRC_FILES += SoftapControllerTI.cpp
++else ifeq ($(WIFI_DRIVER_MODULE_NAME),ar6000)
++  # Atheros AR6003 (ar6000.ko, WEXT, hostapd on athap0)
++  ifneq ($(WIFI_DRIVER_MODULE_PATH),rfkill)
++    LOCAL_CFLAGS += -DWIFI_MODULE_PATH=\"$(WIFI_DRIVER_MODULE_PATH)\"
++  endif
++  LOCAL_SRC_FILES += SoftapControllerATH.cpp
++  LOCAL_C_INCLUDES += external/wpa_supplicant_8/src/common
++  LOCAL_SHARED_LIBRARIES += libwpa_client
+ else
+   LOCAL_SRC_FILES += SoftapController.cpp
  endif
 diff --git a/SoftapControllerATH.cpp b/SoftapControllerATH.cpp
 new file mode 100644
-index 0000000..d697d38
+index 0000000..6779cbc
 --- /dev/null
 +++ b/SoftapControllerATH.cpp
 @@ -0,0 +1,889 @@
@@ -140,7 +143,7 @@ index 0000000..d697d38
 +        snprintf(path, sizeof(path), "/sys/class/rfkill/rfkill%d/type", id);
 +        fd = open(path, O_RDONLY);
 +        if (fd < 0) {
-+            LOGW("open(%s) failed: %s (%d)\n", path, strerror(errno), errno);
++            ALOGW("open(%s) failed: %s (%d)\n", path, strerror(errno), errno);
 +            return -1;
 +        }
 +        sz = read(fd, &buf, sizeof(buf));
@@ -167,13 +170,13 @@ index 0000000..d697d38
 +
 +    fd = open(rfkill_state_path, O_RDONLY);
 +    if (fd < 0) {
-+        LOGE("open(%s) failed: %s (%d)", rfkill_state_path, strerror(errno),
++        ALOGE("open(%s) failed: %s (%d)", rfkill_state_path, strerror(errno),
 +                errno);
 +        goto out;
 +    }
 +    sz = read(fd, &buffer, 1);
 +    if (sz != 1) {
-+        LOGE("read(%s) failed: %s (%d)", rfkill_state_path, strerror(errno),
++        ALOGE("read(%s) failed: %s (%d)", rfkill_state_path, strerror(errno),
 +                errno);
 +        goto out;
 +    }
@@ -208,7 +211,7 @@ index 0000000..d697d38
 +
 +    fd = open(rfkill_state_path, O_WRONLY);
 +    if (fd < 0) {
-+        LOGE("open(%s) for write failed: %s (%d)", rfkill_state_path,
++        ALOGE("open(%s) for write failed: %s (%d)", rfkill_state_path,
 +                strerror(errno), errno);
 +        goto out;
 +    }
@@ -216,7 +219,7 @@ index 0000000..d697d38
 +    sleep(3);
 +    sz = write(fd, &buffer, 1);
 +    if (sz < 0) {
-+        LOGE("write(%s) failed: %s (%d)", rfkill_state_path, strerror(errno),
++        ALOGE("write(%s) failed: %s (%d)", rfkill_state_path, strerror(errno),
 +                errno);
 +        goto out;
 +    }
@@ -238,26 +241,26 @@ index 0000000..d697d38
 +    if (access(HOSTAPD_CONFIG_FILE, R_OK|W_OK) == 0) {
 +        return 0;
 +    } else if (errno != ENOENT) {
-+        LOGE("Cannot access \"%s\": %s", HOSTAPD_CONFIG_FILE, strerror(errno));
++        ALOGE("Cannot access \"%s\": %s", HOSTAPD_CONFIG_FILE, strerror(errno));
 +        return -1;
 +    }
 +
 +    srcfd = open(HOSTAPD_CONFIG_TEMPLATE, O_RDONLY);
 +    if (srcfd < 0) {
-+        LOGE("Cannot open \"%s\": %s", HOSTAPD_CONFIG_TEMPLATE, strerror(errno));
++        ALOGE("Cannot open \"%s\": %s", HOSTAPD_CONFIG_TEMPLATE, strerror(errno));
 +        return -1;
 +    }
 +
 +    destfd = open(HOSTAPD_CONFIG_FILE, O_CREAT|O_WRONLY, 0660);
 +    if (destfd < 0) {
 +        close(srcfd);
-+        LOGE("Cannot create \"%s\": %s", HOSTAPD_CONFIG_FILE, strerror(errno));
++        ALOGE("Cannot create \"%s\": %s", HOSTAPD_CONFIG_FILE, strerror(errno));
 +        return -1;
 +    }
 +
 +    while ((nread = read(srcfd, buf, sizeof(buf))) != 0) {
 +        if (nread < 0) {
-+            LOGE("Error reading \"%s\": %s", HOSTAPD_CONFIG_TEMPLATE, strerror(errno));
++            ALOGE("Error reading \"%s\": %s", HOSTAPD_CONFIG_TEMPLATE, strerror(errno));
 +            close(srcfd);
 +            close(destfd);
 +            unlink(HOSTAPD_CONFIG_FILE);
@@ -270,7 +273,7 @@ index 0000000..d697d38
 +    close(srcfd);
 +
 +    if (chown(HOSTAPD_CONFIG_FILE, AID_SYSTEM, AID_WIFI) < 0) {
-+        LOGE("Error changing group ownership of %s to %d: %s",
++        ALOGE("Error changing group ownership of %s to %d: %s",
 +             HOSTAPD_CONFIG_FILE, AID_WIFI, strerror(errno));
 +        unlink(HOSTAPD_CONFIG_FILE);
 +        return -1;
@@ -391,13 +394,13 @@ index 0000000..d697d38
 +    /* Make sure hostapd is running */
 +    if (!property_get(HOSTAPD_PROP_NAME, supp_status, NULL)
 +            || strcmp(supp_status, "running") != 0) {
-+        LOGE("Supplicant not running, cannot connect");
++        ALOGE("Supplicant not running, cannot connect");
 +        return -1;
 +    }
 +
 +    strcpy(iface, "athap0");
 +    snprintf(ifname, sizeof(ifname), "%s/%s", IFACE_DIR, iface);
-+    LOGD("ifname = %s\n", ifname);
++    ALOGD("ifname = %s\n", ifname);
 +
 +    { /* check iface file is ready */
 +	    int cnt = 160; /* 8 seconds (160*50)*/
@@ -407,17 +410,17 @@ index 0000000..d697d38
 +	    }      
 +	    if (access(ifname, F_OK|W_OK)==0) {
 +		    snprintf(ifname, sizeof(ifname), "%s/%s", IFACE_DIR, iface);
-+		    LOGD("ifname %s is ready to read/write cnt=%d\n", ifname, cnt);
++		    ALOGD("ifname %s is ready to read/write cnt=%d\n", ifname, cnt);
 +	    } else {
 +		    strlcpy(ifname, iface, sizeof(ifname));
-+		    LOGD("ifname %s is not ready, cnt=%d\n", ifname, cnt);
++		    ALOGD("ifname %s is not ready, cnt=%d\n", ifname, cnt);
 +	    }
 +    }
 +
 +
 +    ctrl_conn = wpa_ctrl_open(ifname);
 +    if (ctrl_conn == NULL) {
-+        LOGE("Unable to open connection to hostapd on \"%s\": %s",
++        ALOGE("Unable to open connection to hostapd on \"%s\": %s",
 +             ifname, strerror(errno));
 +        return -1;
 +    }
@@ -478,7 +481,7 @@ index 0000000..d697d38
 +	}
 +
 +	if (ret != 0)
-+		LOGD("Unable to unload driver module \"%s\": %s\n",
++		ALOGD("Unable to unload driver module \"%s\": %s\n",
 +				modname, strerror(errno));
 +	return ret;
 +}
@@ -502,7 +505,7 @@ index 0000000..d697d38
 +    mPid = 0;
 +    mSock = socket(AF_INET, SOCK_DGRAM, 0);
 +    if (mSock < 0)
-+        LOGE("Failed to open socket");
++        ALOGE("Failed to open socket");
 +    memset(mIface, 0, sizeof(mIface));
 +    mProfileValid = 0;
 +    ctrl_conn = NULL;
@@ -518,11 +521,11 @@ index 0000000..d697d38
 +	int fnum, ret;
 +
 +	if (mSock < 0) {
-+		LOGE("Softap driver start - failed to open socket");
++		ALOGE("Softap driver start - failed to open socket");
 +		return -1;
 +	}
 +	if (!iface || (iface[0] == '\0')) {
-+		LOGD("Softap driver start - wrong interface");
++		ALOGD("Softap driver start - wrong interface");
 +		iface = mIface;
 +	}
 +
@@ -543,22 +546,22 @@ index 0000000..d697d38
 +
 +		fd = open("/sys/module/ar6000/parameters/ifname", O_RDWR);
 +		if (fd < 0) {
-+			LOGE("failed to open interface name");
++			ALOGE("failed to open interface name");
 +			ret = -1;
 +		}
 +		if (read(fd, &buffer, 1) != 1) {
-+			LOGE("failed to get interface name");
++			ALOGE("failed to get interface name");
 +			ret = -1;
 +		}
 +		if (buffer != 'a' && write(fd, "athap0", 6) > 0) {
-+			LOGD("interface renamed for AP mode");
++			ALOGD("interface renamed for AP mode");
 +			usleep(500000); /* Give it a while after a name change... */
 +			ret = set_wifi_power(1);
 +		} else if (buffer == 'a') {
-+			LOGD("interface already named for AP mode");
++			ALOGD("interface already named for AP mode");
 +			ret = 0;
 +		} else {
-+			LOGE("failed to change interface name - %c",buffer);
++			ALOGE("failed to change interface name - %c",buffer);
 +			ret = -2;
 +		}
 +		close(fd);
@@ -572,12 +575,12 @@ index 0000000..d697d38
 +	/* Before starting the daemon, make sure its config file exists */
 +	ret =ensure_config_file_exists();
 +	if (ret < 0) {
-+		LOGE("Softap driver start - configuration file missing");
++		ALOGE("Softap driver start - configuration file missing");
 +		return -1;
 +	}
 +	/* Indicate interface down */
 +
-+	LOGD("Softap driver start: %d", ret);
++	ALOGD("Softap driver start: %d", ret);
 +	return ret;
 +}
 +
@@ -585,13 +588,13 @@ index 0000000..d697d38
 +	struct iwreq wrq;
 +	int fnum, ret;
 +
-+	LOGE("softapcontroller->stopDriver");
++	ALOGE("softapcontroller->stopDriver");
 +	if (mSock < 0) {
-+		LOGE("Softap driver stop - failed to open socket");
++		ALOGE("Softap driver stop - failed to open socket");
 +		return -1;
 +	}
 +	if (!iface || (iface[0] == '\0')) {
-+		LOGD("Softap driver stop - wrong interface");
++		ALOGD("Softap driver stop - wrong interface");
 +		iface = mIface;
 +	}
 +	ret = 0;
@@ -609,29 +612,29 @@ index 0000000..d697d38
 +
 +		fd = open("/sys/module/ar6000/parameters/ifname", O_RDWR);
 +		if (fd < 0) {
-+			LOGE("failed to open interface name");
++			ALOGE("failed to open interface name");
 +			ret = -1;
 +		}
 +		if (read(fd, &buffer, 1) != 1) {
-+			LOGE("failed to get interface name");
++			ALOGE("failed to get interface name");
 +			ret = -1;
 +		}
 +		if (buffer != 'w' && write(fd, "wlan0", 5) > 0) {
-+			LOGD("interface renamed for STA mode");
++			ALOGD("interface renamed for STA mode");
 +			usleep(500000); /* Give it a while after a name change... */
 +			ret = 0;
 +		} else if (buffer == 'w') {
-+			LOGD("interface already named for STA mode");
++			ALOGD("interface already named for STA mode");
 +			ret = 0;
 +		} else {
-+			LOGE("failed to change interface name - %c",buffer);
++			ALOGE("failed to change interface name - %c",buffer);
 +			ret = -2;
 +		}
 +		close(fd);
 +	}
 +#endif
 +
-+	LOGD("Softap driver stop: %d", ret);
++	ALOGD("Softap driver stop: %d", ret);
 +	return ret;
 +}
 +
@@ -641,16 +644,16 @@ index 0000000..d697d38
 +    int fnum, ret = 0;
 +
 +    if (mPid) {
-+        LOGE("Softap already started");
++        ALOGE("Softap already started");
 +        return 0;
 +    }
 +    if (mSock < 0) {
-+        LOGE("Softap startap - failed to open socket");
++        ALOGE("Softap startap - failed to open socket");
 +        return -1;
 +    }
 +#if 0
 +   if ((pid = fork()) < 0) {
-+        LOGE("fork failed (%s)", strerror(errno));
++        ALOGE("fork failed (%s)", strerror(errno));
 +        return -1;
 +    }
 +#endif
@@ -666,7 +669,7 @@ index 0000000..d697d38
 +
 +        ret = wifi_start_hostapd();
 +        if (ret < 0) {
-+            LOGE("Softap startap - starting hostapd fails");
++            ALOGE("Softap startap - starting hostapd fails");
 +	    stopDriver("athap0");
 +            return -1;
 +        }
@@ -676,7 +679,7 @@ index 0000000..d697d38
 +
 +        ret = wifi_connect_to_hostapd();
 +        if (ret < 0) {
-+            LOGE("Softap startap - connect to hostapd fails");
++            ALOGE("Softap startap - connect to hostapd fails");
 +            return -1;
 +        }
 +
@@ -684,15 +687,15 @@ index 0000000..d697d38
 +
 +        ret = wifi_load_profile(true);
 +        if (ret < 0) {
-+            LOGE("Softap startap - load new configuration fails");
++            ALOGE("Softap startap - load new configuration fails");
 +            return -1;
 +        }
 +        if (ret) {
-+            LOGE("Softap startap - failed: %d", ret);
++            ALOGE("Softap startap - failed: %d", ret);
 +        }
 +        else {
 +           mPid = pid;
-+           LOGD("Softap startap - Ok");
++           ALOGD("Softap startap - Ok");
 +           usleep(AP_BSS_START_DELAY);
 +        }
 +    }
@@ -705,17 +708,17 @@ index 0000000..d697d38
 +    int fnum, ret;
 +
 +    if (mPid == 0) {
-+        LOGE("Softap already stopped");
++        ALOGE("Softap already stopped");
 +        return 0;
 +    }
 +    if (mSock < 0) {
-+        LOGE("Softap stopap - failed to open socket");
++        ALOGE("Softap stopap - failed to open socket");
 +        return -1;
 +    }
 +    wifi_close_hostapd_connection();
 +    ret = wifi_stop_hostapd();
 +    mPid = 0;
-+    LOGD("Softap service stopped: %d", ret);
++    ALOGD("Softap service stopped: %d", ret);
 +
 +#ifndef WIFI_MODULE_PATH
 +    set_wifi_power(0);
@@ -725,22 +728,22 @@ index 0000000..d697d38
 +
 +        fd = open("/sys/module/ar6000/parameters/ifname", O_RDWR);
 +        if (fd < 0) {
-+            LOGE("failed to open interface name");
++            ALOGE("failed to open interface name");
 +            ret = -1;
 +        }
 +        if (read(fd, &buffer, 1) != 1) {
-+            LOGE("failed to get interface name");
++            ALOGE("failed to get interface name");
 +            ret = -1;
 +        }
 +        if (buffer != 'w' && write(fd, "wlan0", 5) > 0) {
-+            LOGD("interface renamed for STA mode");
++            ALOGD("interface renamed for STA mode");
 +            usleep(500000); /* Give it a while after a name change... */
 +            ret = 0;
 +        } else if (buffer == 'w') {
-+            LOGD("interface already named for STA mode");
++            ALOGD("interface already named for STA mode");
 +            ret = 0;
 +        } else {
-+            LOGE("failed to change interface name - %c",buffer);
++            ALOGE("failed to change interface name - %c",buffer);
 +            ret = -2;
 +        }
 +        close(fd);
@@ -759,7 +762,7 @@ index 0000000..d697d38
 +    if (pos < 0)
 +        return pos;
 +    if ((unsigned)(pos + strlen(cmd) + strlen(arg) + 1) >= sizeof(mBuf)) {
-+        LOGE("Command line is too big");
++        ALOGE("Command line is too big");
 +        return -1;
 +    }
 +    pos += sprintf(&mBuf[pos], "%s=%s,", cmd, arg);
@@ -787,18 +790,18 @@ index 0000000..d697d38
 +    char buf[80];
 +    int len;
 +    if (mSock < 0) {
-+        LOGE("Softap set - failed to open socket");
++        ALOGE("Softap set - failed to open socket");
 +        return -1;
 +    }
 +    if (argc < 4) {
-+        LOGE("Softap set - missing arguments");
++        ALOGE("Softap set - missing arguments");
 +        return -1;
 +    }
 +    ret = 0;
 +
 +    fd = open(HOSTAPD_CONFIG_FILE, O_CREAT|O_WRONLY|O_TRUNC, 0660);
 +    if (fd < 0) {
-+        LOGE("Cannot create \"%s\": %s", HOSTAPD_CONFIG_FILE, strerror(errno));
++        ALOGE("Cannot create \"%s\": %s", HOSTAPD_CONFIG_FILE, strerror(errno));
 +        return -1;
 +    }
 +    
@@ -858,14 +861,14 @@ index 0000000..d697d38
 +
 +    ret = wifi_load_profile(isSoftapStarted());
 +    if (ret < 0) {
-+        LOGE("Softap set - load new configuration fails");
++        ALOGE("Softap set - load new configuration fails");
 +        return -1;
 +    }
 +    if (ret) {
-+        LOGE("Softap set - failed: %d", ret);
++        ALOGE("Softap set - failed: %d", ret);
 +    }
 +    else {
-+        LOGD("Softap set - Ok");
++        ALOGD("Softap set - Ok");
 +        usleep(AP_SET_CFG_DELAY);
 +    }
 +    return ret;
@@ -883,15 +886,15 @@ index 0000000..d697d38
 +    char *iface;
 +
 +    if (mSock < 0) {
-+        LOGE("Softap fwrealod - failed to open socket");
++        ALOGE("Softap fwrealod - failed to open socket");
 +        return -1;
 +    }
 +    if (argc < 4) {
-+        LOGE("Softap fwreload - missing arguments");
++        ALOGE("Softap fwreload - missing arguments");
 +        return -1;
 +    }
 +    ret = 0;
-+    LOGD("Softap fwReload - Ok");
++    ALOGD("Softap fwReload - Ok");
 +    return ret;
 +}
 +
@@ -915,7 +918,7 @@ index 0000000..d697d38
 +    size_t len, used = 0;
 +
 +    if (ctrl_conn == NULL) {
-+        LOGE("Softap clients - hostapd not connected");
++        ALOGE("Softap clients - hostapd not connected");
 +        return -1;
 +    }
 +    list[0] = '\0';

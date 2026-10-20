@@ -70,12 +70,9 @@ BOARD_DISABLE_HW_ID_MATCH_CHECK := true
 
 # OpenGL drivers config file path
 BOARD_EGL_CFG := device/huawei/y210/prebuilt/system/lib/egl/egl.cfg
-# hwui (USE_OPENGL_RENDERER) off: with it, every dialog drawn by a hwui app
-# came out tiled ~2.5x (a 320 px buffer at a 128 px stride) with stale pixels
-# in its transparent area, while full-screen activities looked right
-# (2026-10-20, see RENDER_NOTES.md). App UIs draw in software; SurfaceFlinger
-# and GL apps still run on the Adreno 200.
-# USE_OPENGL_RENDERER := true
+# hwui stays on in JB (USE_OPENGL_RENDERER above is required to build).
+# CM9 turned it off because dialogs of hwui apps came out tiled ~2.5x with
+# stale pixels (2026-10-20, see RENDER_NOTES.md); check dialogs on JB.
 BOARD_USES_QCOM_HARDWARE := true
 TARGET_USES_GENLOCK := true
 COMMON_GLOBAL_CFLAGS += -DQCOM_HARDWARE
@@ -167,3 +164,15 @@ COMMON_GLOBAL_CFLAGS += -DREFRESH_RATE=60
 # We ship our own root init.rc (device/huawei/y210/init.rc) so it can import
 # init.${ro.hardware}.rc / .usb.rc without touching system/core/rootdir/init.rc.
 TARGET_PROVIDES_INIT_RC := true
+
+# Offline charging lives in the recovery partition: with the charger plugged
+# in at power-on the bootloader boots recovery with charge_flag=1 and
+# Huawei's /sbin/charge draws the battery. When charge reboots to the system
+# the bootloader also passes androidboot.battchg_pause=true to the boot
+# partition; init then enters its own charger mode (only "on charger", no
+# "boot") and the phone stays on the logo. Point init at a cmdline name the
+# bootloader never sends so it always boots normally. JB's init/Android.mk
+# does not forward BOARD_CHARGING_CMDLINE_* (CM9's does), but init.c only
+# defines them #ifndef, so pass them as global defines.
+COMMON_GLOBAL_CFLAGS += -DBOARD_CHARGING_CMDLINE_NAME='"androidboot.y210_charger_unused"'
+COMMON_GLOBAL_CFLAGS += -DBOARD_CHARGING_CMDLINE_VALUE='"true"'

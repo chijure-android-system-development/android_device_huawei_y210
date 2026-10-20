@@ -51,7 +51,7 @@
 
 // comment this out to enable logging
 // #undef LOGD
-// #define LOGD(...) {}
+// #define ALOGD(...) {}
 
 /*===========================================================================
 

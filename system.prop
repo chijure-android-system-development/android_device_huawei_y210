@@ -415,3 +415,12 @@ persist.camera.delegate_setparams=1
 # ICS on ~170MB usable RAM sits in lowMemory almost all the time without it.
 ro.zram.default=18
 
+# hwui: the defaults (24MB texture + 16MB layer cache per process) are sized
+# for big-RAM devices. Caps for 320x480 on ~165MB usable.
+ro.hwui.texture_cache_size=8
+ro.hwui.layer_cache_size=4
+ro.hwui.path_cache_size=2
+ro.hwui.shape_cache_size=0.5
+ro.hwui.gradient_cache_size=0.25
+ro.hwui.drop_shadow_cache_size=1
+ro.hwui.fbo_cache_size=8

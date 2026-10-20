@@ -1,7 +1,9 @@
 # Y210Overrides: empty package (manifest only, no code, no launcher entry)
 # whose only job is LOCAL_OVERRIDES_PACKAGES. vendor/cm/config/common.mk adds
 # CM's wallpaper/live-wallpaper packages and VideoEditor, which do not fit in
-# the Y210 system partition (system.img ~179MB of 186MB). build/core/main.mk
+# the Y210 system partition (system.img ~179MB of 186MB). On CM10 it also
+# drops Exchange2 (build/target generic_no_telephony.mk) and the T-Mobile
+# theme engine (vendor/cm themes_common.mk). build/core/main.mk
 # drops overridden packages from the install, so this replaces the old
 # build/core/product_config.mk filter patch.
 
@@ -23,6 +25,10 @@ LOCAL_OVERRIDES_PACKAGES := \
     HoloSpiralWallpaper \
     NoiseField \
     PhaseBeam \
-    VisualizationWallpapers
+    VisualizationWallpapers \
+    Exchange2 \
+    ThemeManager \
+    ThemeChooser \
+    CMFileManagerThemes
 
 include $(BUILD_PACKAGE)

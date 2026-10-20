@@ -158,21 +158,18 @@ PRODUCT_PACKAGES += \
 PRODUCT_LOCALES += hdpi
 
 # HVGA (320x480, mdpi) phone: drop resource buckets for screen sizes/
-# densities this device can never use (e.g. Trebuchet alone ships ~9.5 MB
-# of sw600dp/sw720dp tablet wallpaper art under its default packaging).
-PRODUCT_AAPT_CONFIG := normal mdpi
+# densities this device can never use. sw320dp is this screen's smallest
+# width; aapt's filter then drops every sw600dp/sw720dp resource (Trebuchet
+# alone ships ~9.5 MB of tablet wallpaper art) while unqualified resources
+# stay. The locale list above already drops the other LatinIME dictionaries.
+PRODUCT_AAPT_CONFIG := normal mdpi sw320dp
 PRODUCT_AAPT_PREF_CONFIG := mdpi
 
-# system.img must fit the Y210's real ~199 MB /system partition (same limit
-# hit on the CM9 side). vendor/cm/config/common.mk unconditionally adds
-# ~19 MB of extra LatinIME language dictionaries plus several apps that
-# aren't needed for bring-up. PRODUCT_PACKAGE_OVERLAYS/PRODUCT_PACKAGES/etc.
-# can't be subtracted from here: Android's product-inheritance system
-# (build/core/node_fns.mk's import-nodes) evaluates each product .mk file's
-# variables in an isolated scope and unions the results at the end, so a
-# filter-out in this file never sees what an inherited file like common.mk
-# already added. The actual trim lives in common.mk itself, gated on
-# TARGET_PRODUCT so it only affects this device.
+# system.img must fit the Y210's real ~186 MiB /system partition. Packages
+# that vendor/cm or build/target add and don't fit are dropped by
+# Y210Overrides (overrides/): product files can't filter-out what an
+# inherited file added (build/core/node_fns.mk evaluates each one in its own
+# scope), and the platform stays unpatched.
 
 PRODUCT_BUILD_PROP_OVERRIDES += BUILD_UTC_DATE=0
 PRODUCT_NAME := full_y210
