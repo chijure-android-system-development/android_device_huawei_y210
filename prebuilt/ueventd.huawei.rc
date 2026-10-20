@@ -59,7 +59,10 @@
 /dev/pmem_adsp*           0660   system     audio
 /dev/pmem_smipool*        0660   system     camera
 /dev/pmem_camera*         0660   system     camera
-/dev/oncrpc/*             0660   root       qcom_oncrpc
+# owner system: system_server (GPS HAL) reaches the RPC nodes as owner. Its
+# groups do not include qcom_oncrpc, which is 3008 on ICS (3006 there is
+# net_bw_stats): the GPS HAL got "Permission denied" on 00000000:0.
+/dev/oncrpc/*             0660   system     qcom_oncrpc
 /dev/adsp/*               0660   system     audio
 /dev/snd/*                0660   system     audio
 /dev/mt9t013              0660   system     system

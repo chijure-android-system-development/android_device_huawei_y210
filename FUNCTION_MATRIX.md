@@ -92,7 +92,7 @@ Los notes por área están en los archivos `*_NOTES.md` de este directorio.
 | Encender / scan / asociar | **OK** | AR6003 / ath6kl, interfaz `eth0` |
 | DHCP | **OK** | |
 | Redes persistentes | **OK** | wpa_supplicant.conf no se sobreescribe en boot |
-| Wi-Fi tethering (hotspot) | **OK** | NAT sobre rmnet0 |
+| Wi-Fi tethering (hotspot) | **No** | 2026-10-20: Ajustes no muestra la opción (sin `config_tether_*_regexs` en el overlay) y el `SoftapController` genérico de netd usa nl80211; el AR6003 va por WEXT/`athap0`. La línea OK venía de CM7 |
 
 ### Bluetooth
 

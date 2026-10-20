@@ -115,3 +115,16 @@ adb shell "cat /proc/$(adb shell pidof system_server)/status | grep Groups"
 - Fix real (satélites) en exteriores — prueba a cielo abierto sin obstáculos.
   Cuando se obtenga fix, actualizar `FUNCTION_MATRIX.md`:
   `GPS → Fix + ubicación real: OK`
+
+## 2026-10-20: gps/ en el device tree y GID de oncrpc
+
+- `gps.y210` se compila desde `gps/` (mismo código que el device tree de CM7,
+  con el evento NMEA 1 Hz, sentencias de 200 bytes y la corrección del rollover
+  de semanas de 2019 en ubicaciones y en `$GPRMC`/`$GPZDA`); `hardware/qcom/gps`
+  queda fuera del build.
+- `cannot create RPC client` / `error opening /dev/oncrpc/00000000:0:
+  Permission denied`: en ICS `qcom_oncrpc` es el GID **3008** (3006 es
+  `net_bw_stats`) y system_server no lo tiene. Los nodos `/dev/oncrpc/*` pasan a
+  `system:qcom_oncrpc` (`ueventd.huawei.rc`; el `chown` de `boot_completed`
+  usaba `0.3006`, o sea `net_bw_stats`, y ahora va por nombre). Validado:
+  `Loc API RPC client initialized`.

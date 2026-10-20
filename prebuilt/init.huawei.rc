@@ -88,8 +88,16 @@ on boot
     exec /system/bin/rm -rf /data/system/wpa_supplicant
     # Seed the supplicant config only on first boot; do not clobber saved networks.
     exec /system/bin/sh -c "if [ ! -f /data/misc/wifi/wpa_supplicant.conf ]; then cat /system/etc/wifi/wpa_supplicant.conf > /data/misc/wifi/wpa_supplicant.conf; fi"
-    chown wifi wifi /data/misc/wifi/wpa_supplicant.conf
+    # system:wifi as ICS wifi.c expects: it chmods the file from system_server
+    # and, if that fails (only the owner can), deletes it and Wi-Fi stays off
+    # (seen right after a data wipe with wifi:wifi).
+    chown system wifi /data/misc/wifi/wpa_supplicant.conf
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
+    # wlan_detect creates /data/misc/wifi/Cal_powerTuned_pa.bin (the per-unit
+    # TX power calibration ar6000.ko applies) from the modem. CM7's wifi.c ran
+    # it as WIFI_PRE_LOADER before each driver load; ICS wifi.c has no
+    # pre-loader, so nothing started it and the driver ran uncalibrated.
+    start wlan_detect
     write /data/.psm.info 1
     chown system system /data/.psm.info
     chmod 0660 /data/.psm.info
@@ -211,9 +219,13 @@ on post-fs-data
     chown wifi wifi /data/misc/wifi/load/data.patch.hw3_0.bin
 
 on property:sys.boot_completed=1
+    # again once the modem is surely up, in case the run on boot could not
+    # read the calibration over RPC (oneshot: harmless if it already did)
+    start wlan_detect
     # Fix oncrpc node ownership/permissions after system is fully up
-    # toolbox `chown` expects user.group (or numeric ids). Use AID_QCOM_ONCRPC=3006.
-    exec /system/bin/sh -c "chown 0.3006 /dev/oncrpc/*; chmod 0660 /dev/oncrpc/*"
+    # toolbox `chown` takes user.group. By name: AID_QCOM_ONCRPC is 3008 on ICS
+    # (3006 is net_bw_stats); owner system so system_server (GPS HAL) gets in.
+    exec /system/bin/sh -c "chown system.qcom_oncrpc /dev/oncrpc/*; chmod 0660 /dev/oncrpc/*"
     # Restart RPC service after fixing perms
     # stop ril-daemon
     start oem_rpc_svc

@@ -1395,6 +1395,69 @@ ar6000_reg_update(AR_SOFTC_T *ar, A_UCHAR *eeprom_data, size_t eeprom_size, int 
 }
 
 #ifdef ANDROID_ENV
+/*
+ * Huawei Y210: per-unit TX power correction, as in the stock module
+ * (AR6kSDK RC.776, inlined in ar6000_transfer_bin_file). The 2048-byte board
+ * file holds 1024 bytes of board data and the extended board data; three
+ * signed byte pairs from Cal_powerTuned_pa.bin are subtracted from the
+ * per-chain power entries of the extended data, the 16-bit field after each
+ * pair moves by -5 x the first value, and the extended data checksum (fixed
+ * at 0x2fe of the extended data, XOR over all of it) is recomputed.
+ */
+static unsigned int needPowerTuned = 1;
+module_param(needPowerTuned, uint, 0644);
+
+#define AR6K_POWER_TUNED_FILE "../../data/misc/wifi/Cal_powerTuned_pa.bin"
+
+static void
+ar6000_cal_powerTuned(AR_SOFTC_T *ar, A_UCHAR *eeprom, size_t size,
+                      A_INT32 board_size, A_INT32 ext_size)
+{
+    static const int entry[3] = { 0x5f0, 0x5fe, 0x60c };
+    const struct firmware *fw = NULL;
+    A_INT8 d[6];
+    A_UINT16 v, sum;
+    A_INT32 i;
+
+    if (!needPowerTuned || ar->arTargetType != TARGET_TYPE_AR6003 ||
+        size != 2048 || board_size + ext_size != 2048)
+        return;
+    if (A_REQUEST_FIRMWARE(&fw, AR6K_POWER_TUNED_FILE,
+                           ((struct device *)ar->osDevInfo.pOSDevice)) != 0) {
+        printk(KERN_INFO "ar6000: no %s\n", AR6K_POWER_TUNED_FILE);
+        return;
+    }
+    if (fw->size < sizeof(d)) {
+        printk(KERN_ERR "ar6000: power tuned file size %d\n", (int)fw->size);
+        A_RELEASE_FIRMWARE(fw);
+        return;
+    }
+    A_MEMCPY(d, fw->data, sizeof(d));
+    A_RELEASE_FIRMWARE(fw);
+
+    for (i = 0; i < 3; i++) {
+        A_UCHAR *e = eeprom + entry[i];
+        e[0] -= d[2 * i];
+        e[1] -= d[2 * i + 1];
+        v = e[4] | (e[5] << 8);
+        v += -5 * d[2 * i];
+        e[4] = v & 0xff;
+        e[5] = v >> 8;
+    }
+
+    eeprom[board_size + 0x2fe] = 0;
+    eeprom[board_size + 0x2ff] = 0;
+    sum = 0;
+    for (i = 0; i < ext_size; i += 2)
+        sum ^= eeprom[board_size + i] | (eeprom[board_size + i + 1] << 8);
+    sum = ~sum;
+    eeprom[board_size + 0x2fe] = sum & 0xff;
+    eeprom[board_size + 0x2ff] = sum >> 8;
+
+    printk(KERN_INFO "ar6000: power tuned %d/%d %d/%d %d/%d, ext %d\n",
+           d[0], d[1], d[2], d[3], d[4], d[5], ext_size);
+}
+
 static void
 ar6000_psminfo_update(void)
 {
@@ -1595,6 +1658,8 @@ ar6000_transfer_bin_file(AR_SOFTC_T *ar, AR6K_BIN_FILE file, A_UINT32 address, A
         }
 
 #ifdef ANDROID_ENV
+        ar6000_cal_powerTuned(ar, tempEeprom, fw_entry->size,
+                              board_data_size, board_ext_data_size);
         ar6000_psminfo_update();
 #endif
         /* Determine where in Target RAM to write Board Data */
