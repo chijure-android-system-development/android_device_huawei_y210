@@ -6,7 +6,7 @@
 |---|---|
 | Encender / scan / asociar / DHCP | **OK** |
 | Redes persistentes (wpa_supplicant.conf) | **OK** |
-| Wi-Fi tethering (hotspot) | **OK** |
+| Wi-Fi tethering (hotspot) | **No** (ver FUNCTION_MATRIX.md) |
 | Driver / firmware | AR6003 / ath6kl, interfaz `eth0` |
 
 El firmware del AR6003 se copia en `on post-fs-data` porque `wlan_detect` no
@@ -263,3 +263,14 @@ Durante la validación de este bug apareció una limitación del device:
 Implicación práctica:
 - no asumir que `adb reboot bootloader` deja el equipo listo para `fastboot flash`;
 - siempre comprobar con `fastboot devices` antes de flashear.
+
+## Primer arranque tras un wipe y calibración (2026-10-20)
+
+- `wpa_supplicant.conf` quedaba `wifi:wifi`; el `wifi.c` de ICS le hace `chmod`
+  desde system_server, falla (solo el dueño puede), borra el archivo y no
+  enciende el Wi-Fi. Ahora `init.huawei.rc` lo deja `system:wifi`.
+- `Cal_powerTuned_pa.bin` (calibración de potencia por unidad, ver
+  `wifi/AR6kSDK/README.y210.md`) lo crea `wlan_detect` desde el módem. En CM7
+  lo lanzaba `wifi.c` como `WIFI_PRE_LOADER`; el de ICS no tiene pre-loader y
+  nadie lo arrancaba. `init.huawei.rc` lo arranca en `boot` y otra vez con
+  `sys.boot_completed`. Validado: `ar6000: power tuned -2/6 -2/7 -2/5`.

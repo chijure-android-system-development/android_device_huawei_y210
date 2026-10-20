@@ -7,6 +7,11 @@ rild.libpath=/system/lib/libril-y210-shim.so
 rild.libargs=-d /dev/smd0
 ro.telephony.default_network=0
 ro.telephony.ril_class=HuaweiY210RIL
+# Right after a PIN is accepted the blob reports SUBSCRIPTION_PERSO with
+# perso_substate UNKNOWN/READY for about a second; without qcomuiccstack
+# IccCard takes any PERSO state as NETWORK_LOCKED and shows the "SIM network
+# unlock PIN" screen (seen on CM7). With it, only a real network lock does.
+ro.telephony.ril.v3=qcomuiccstack
 ril.subscription.types=NV,RUIM
 ro.baseband=msm
 ro.sf.lcd_density=160

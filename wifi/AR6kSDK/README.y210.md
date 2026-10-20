@@ -31,9 +31,18 @@ Cambios para el Y210 (todos replican lo que hace el módulo stock):
 - `os/linux/ar6k_pal.c`: este kernel 2.6.38 de MSM sigue llamando
   `HCI_80211` a lo que kernels posteriores llaman `HCI_AMP`.
 
-Diferencias conocidas con el stock: falta `ar6000_cal_powerTuned` (ajuste de
-potencia TX de Huawei desde `/data/misc/wifi/Cal_powerTuned_pa.bin`) y la MAC
-ahora sale del EEPROM del chip en vez de generarse al azar en cada arranque.
+- `os/linux/ar6000_drv.c`: `ar6000_cal_powerTuned` (2026-10-19), el ajuste de
+  potencia TX por unidad de Huawei, reconstruido del módulo stock (estaba
+  inline en `ar6000_transfer_bin_file`). Con el board file de 2048 bytes de
+  AR6003 lee 6 bytes con signo de `/data/misc/wifi/Cal_powerTuned_pa.bin`
+  (ruta relativa a `fwpath`, como el stock), los resta de los pares en
+  0x5f0/0x5fe/0x60c del board data extendido, mueve el campo de 16 bits de
+  +4 en -5 x el primero y recalcula el checksum del extendido (en 0x2fe del
+  extendido, XOR de sus 1024 bytes negado). Parámetro `needPowerTuned`
+  (por defecto 1, como el stock). En este equipo: `-2/6 -2/7 -2/5`.
+
+Diferencia conocida con el stock: la MAC sale del EEPROM del chip en vez de
+generarse al azar en cada arranque.
 
 ## Validación (2026-10-19)
 

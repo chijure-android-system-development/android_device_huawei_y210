@@ -34,10 +34,10 @@ TARGET_PROVIDES_LIBAUDIO := true
 # building the generic msm7k lights HAL alongside the device-specific one.
 TARGET_PROVIDES_LIBLIGHTS := true
 
-# GPS
-BOARD_USES_QCOM_GPS := true
-BOARD_VENDOR_QCOM_GPS_LOC_API_AMSS_VERSION := 50000
-BOARD_VENDOR_QCOM_GPS_LOC_API_HARDWARE := y210
+# GPS: gps.y210 se compila desde gps/ (loc_api de hardware/qcom/gps para
+# AMSS 50000, con los arreglos de NMEA y del rollover de semanas de 2019; el
+# mismo codigo que el device tree de CM7). Sin BOARD_VENDOR_QCOM_GPS_LOC_API_
+# HARDWARE, hardware/qcom/gps no entra al build y no hay modulos duplicados.
 
 TARGET_SPECIFIC_HEADER_PATH := device/huawei/y210/include
 
