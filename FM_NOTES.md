@@ -1,5 +1,17 @@
 # FM Radio (Y210) — CM9/ICS
 
+## Decisión (2026-10-20): CM9 sale sin radio FM
+
+Estado real al 2026-10-20: el driver del kernel (`/dev/radio0`) y los binarios
+stock (`fm_qsoc_patches`, `fmconfig`, `libfm_hal.so`, `libqcomfm_if.so`,
+`init.qcom.fm.sh`) están en el system, pero nadie carga el firmware
+(`hw.fm.init` vacío), el framework de CM9 no tiene `android.hardware.fmradio`
+ni su JNI, no hay app instalada y el HAL de audio de ICS no rutea FM. Lo que
+dice la tabla de 2026-06-06 de abajo ya no es cierto (aquella prueba usaba el
+stack de CM7 metido en CM9, que traía muchos errores). Hacerla funcionar sería
+un proyecto propio (stack FM como `qcom.fmradio.jar` + JNI en el device tree,
+`fminit`, app, ruteo de audio en ICS); por ahora queda fuera de alcance.
+
 ## Estado CM9 (2026-06-06)
 
 | Función | Estado |
