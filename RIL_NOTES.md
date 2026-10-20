@@ -244,3 +244,17 @@ esos intentos no gastaron reintentos.
 
 Validado: `ENTER_SIM_PIN {0}`, `LOCKED`→`READY`→`IMSI`→`LOADED`, sin pantalla de
 red (con `ro.telephony.ril.v3=qcomuiccstack`), registro en Claro.
+
+## Señal en 0 barras en CM9 (2026-10-20)
+
+Síntoma: barras de señal vacías y Ajustes > Estado mostraba `-32767 dBm 0 asu`
+aunque había servicio HSPA. `dumpsys telephony.registry` daba
+`SignalStrength: 8 -1 -1 -1 -1 -1 -1 99 -32767 -32767 -32767 -32767`: el GSM (asu 8)
+llega bien, pero qcril rellena los campos LTE con 99/-32767 (sus "inválidos")
+y `SignalStrength.getLevel()/getDbm()` de ICS solo usa GSM si los cuatro LTE son
+exactamente -1; si no, calcula como LTE -> 0 barras.
+
+Arreglo (solo device tree): `ro.telephony.ril.v3=qcomuiccstack,signalstrength`
+en system.prop. Con `signalstrength`, `RIL.responseSignalStrength()` lee solo
+los 7 enteros GSM/CDMA/EVDO y pone -1 en los LTE. Verificado en el teléfono:
+`-97 dBm 8 asu` y barras visibles.

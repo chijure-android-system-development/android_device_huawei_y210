@@ -150,7 +150,7 @@ Ver `CAMERA_NOTES.md` para el análisis del wrapper CM7 y la estrategia de port 
 
 | Función | Estado | Nota |
 |---|---|---|
-| Baseband / operador / señal | **OK** | Claro Perú 71610, HSPA, baseband 109808 |
+| Baseband / operador / señal | **OK** | Claro Perú 71610, HSPA, baseband 109808; barras y dBm OK con `ril.v3=...,signalstrength` (antes 0 barras) |
 | IMEI | **OK** | `service call iphonesubinfo 1` |
 | Llamadas (voz) | **OK** | Entrante y saliente |
 | SMS | **OK** | Enviar y recibir |
