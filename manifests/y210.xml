@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Local manifest for CyanogenMod 10.1 on the Huawei Ascend Y210.
+     Copy to .repo/local_manifests/y210.xml after
+     `repo init -u https://github.com/CyanogenMod/android.git -b cm-10.1`. -->
+<manifest>
+  <remote name="gh" fetch="https://github.com" />
+
+  <!-- Device -->
+  <project path="device/huawei/y210" name="chijure-android-system-development/android_device_huawei_y210" remote="gh" revision="cm-10.1" />
+  <project path="kernel/huawei/y210" name="chijure-android-system-development/android_kernel_huawei_y210" remote="gh" revision="cm-10.1" />
+  <project path="vendor/huawei/y210" name="chijure-android-system-development/android_vendor_huawei_y210" remote="gh" revision="cm-10.1" />
+
+  <!-- MSM7x27A: cm-10.1's hardware/qcom/display and media are the msm8960
+       ones. The platform stays CM; only these legacy HALs come from legaCyMod. -->
+  <project path="hardware/qcom/display-legacy" name="legaCyMod/android_hardware_qcom_display-legacy" remote="gh" revision="cm-10.1" />
+  <project path="hardware/qcom/media-legacy" name="legaCyMod/android_hardware_qcom_media-legacy" remote="gh" revision="cm-10.1" />
+  <!-- Atheros AR6003: lib_driver_cmd_ath6kl for wpa_supplicant_8 -->
+  <project path="hardware/atheros/wlan" name="legaCyMod/android_hardware_atheros_wlan" remote="gh" revision="cm-10.1" />
+</manifest>
