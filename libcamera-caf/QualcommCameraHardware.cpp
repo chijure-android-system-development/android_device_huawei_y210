@@ -1939,12 +1939,20 @@ void QualcommCameraHardware::initDefaultParameters()
     mParameters.set(CameraParameters::KEY_MAX_SATURATION,
             CAMERA_MAX_SATURATION);
 
-    mParameters.set(
-            CameraParameters::KEY_MAX_EXPOSURE_COMPENSATION,
-            EXPOSURE_COMPENSATION_MAXIMUM_NUMERATOR);
-    mParameters.set(
-            CameraParameters::KEY_MIN_EXPOSURE_COMPENSATION,
-            EXPOSURE_COMPENSATION_MINIMUM_NUMERATOR);
+    /* min == max == 0 is how the API says "not supported"; advertising
+     * -12..12 for a sensor that ignores it sent 4.2 Camera's software HDR
+     * into an endless shooting loop (it waits for the EV to change). */
+    if (mCfgControl.mm_camera_is_supported(CAMERA_PARM_EXPOSURE_COMPENSATION)) {
+        mParameters.set(
+                CameraParameters::KEY_MAX_EXPOSURE_COMPENSATION,
+                EXPOSURE_COMPENSATION_MAXIMUM_NUMERATOR);
+        mParameters.set(
+                CameraParameters::KEY_MIN_EXPOSURE_COMPENSATION,
+                EXPOSURE_COMPENSATION_MINIMUM_NUMERATOR);
+    } else {
+        mParameters.set(CameraParameters::KEY_MAX_EXPOSURE_COMPENSATION, 0);
+        mParameters.set(CameraParameters::KEY_MIN_EXPOSURE_COMPENSATION, 0);
+    }
     mParameters.set(
             CameraParameters::KEY_EXPOSURE_COMPENSATION,
             EXPOSURE_COMPENSATION_DEFAULT_NUMERATOR);

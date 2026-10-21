@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Software HDR shoots at min/0/max exposure compensation; the Y210
+         sensor has none, so the shots never change and it loops forever. -->
+    <bool name="disableSoftwareHDR">true</bool>
+</resources>
