@@ -112,7 +112,10 @@ WIFI_DRIVER_MODULE_ARG      := ""
 WIFI_DRIVER_MODULE_NAME     := ar6000
 BOARD_WPA_SUPPLICANT_PRIVATE_LIB := lib_driver_cmd_ath6kl
 WPA_SUPPLICANT_VERSION      := VER_0_8_X
-WIFI_PRE_LOADER             := wlan_detect
+# ar6000.ko loads its firmware asynchronously: eth0 shows up ~0.8 s after
+# insmod returns, but 4.2's wifi.c reports the driver loaded right away and
+# wpa_supplicant failed on a missing eth0 (retried 5 s later) on every enable.
+WIFI_DRIVER_LOADER_DELAY    := 1500000
 
 # Partition sizes from device /proc/mtd (bytes)
 BOARD_BOOTIMAGE_PARTITION_SIZE := 0x00500000
