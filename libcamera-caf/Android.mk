@@ -21,9 +21,9 @@ LOCAL_SRC_FILES := QualcommCamera.cpp QualcommCameraHardware.cpp
 LOCAL_C_INCLUDES += \
     $(LOCAL_PATH) \
     frameworks/base/services/camera/libcameraservice \
-    hardware/qcom/display/libgralloc \
-    hardware/qcom/display/libgenlock \
-    hardware/qcom/media/libstagefrighthw \
+    hardware/qcom/display-legacy/libgralloc \
+    hardware/qcom/display-legacy/libgenlock \
+    hardware/qcom/media-legacy/libstagefrighthw \
     external/jpeg
 
 LOCAL_SHARED_LIBRARIES := libutils libui libcamera_client liblog libcutils libgenlock libbinder libdl libhardware libjpeg

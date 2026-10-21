@@ -394,6 +394,10 @@ static int previewHeightToNativeZoom;
 #define CAMERA_SNAPSHOT_ZSL 0x08
 
 namespace android {
+
+/* 4.2's libcamera_client only defines CameraParameters::SCENE_MODE_OFF
+ * with HTC_CAMERA_HARDWARE. */
+static const char Y210_SCENE_MODE_OFF[] = "off";
 	extern void native_send_data_callback(int32_t msgType,
                               camera_memory_t * framebuffer,
 	                              void* user);
@@ -685,7 +689,7 @@ static camera_antibanding_type camera_get_location(void) {
 #endif
 
 static const str_map scenemode[] = {
-    { CameraParameters::SCENE_MODE_OFF,           CAMERA_BESTSHOT_OFF },
+    { Y210_SCENE_MODE_OFF,           CAMERA_BESTSHOT_OFF },
     { CameraParameters::SCENE_MODE_AUTO,           CAMERA_BESTSHOT_AUTO },
     { CameraParameters::SCENE_MODE_ACTION,         CAMERA_BESTSHOT_ACTION },
     { CameraParameters::SCENE_MODE_PORTRAIT,       CAMERA_BESTSHOT_PORTRAIT },
@@ -1997,7 +2001,7 @@ void QualcommCameraHardware::initDefaultParameters()
     mParameters.set(CameraParameters::KEY_SUPPORTED_SKIN_TONE_ENHANCEMENT_MODES,
                     skinToneEnhancement_values);
     mParameters.set(CameraParameters::KEY_SCENE_MODE,
-                    CameraParameters::SCENE_MODE_OFF);
+                    Y210_SCENE_MODE_OFF);
     mParameters.set("strtextures", "OFF");
 
     mParameters.set(CameraParameters::KEY_SUPPORTED_SCENE_MODES,
@@ -6317,6 +6321,9 @@ status_t QualcommCameraHardware::sendCommand(int32_t command, int32_t arg1,
     Mutex::Autolock l(&mLock);
 
     switch(command)  {
+#ifdef QCOM_ICS_COMPAT
+      /* 4.2's system/camera.h only has these with QCOM_ICS_COMPAT, which
+       * would also renumber the CAMERA_MSG_* the framework uses. */
       case CAMERA_CMD_HISTOGRAM_ON:
                                    ALOGV("histogram set to on");
                                    return setHistogramOn();
@@ -6329,6 +6336,7 @@ status_t QualcommCameraHardware::sendCommand(int32_t command, int32_t arg1,
                                        mSendData = true;
                                    mStatsWaitLock.unlock();
                                    return NO_ERROR;
+#endif
 #if 0
       case CAMERA_CMD_FACE_DETECTION_ON:
                                    if(supportsFaceDetection() == false){
