@@ -11,18 +11,23 @@ TARGET_BOARD_PLATFORM_GPU := qcom-adreno200
 
 TARGET_NO_RADIOIMAGE := true
 
+TARGET_ARCH := arm
 TARGET_CPU_ABI := armeabi-v7a
 TARGET_CPU_ABI2 := armeabi
 TARGET_ARCH_VARIANT := armv7-a-neon
+TARGET_ARCH_VARIANT_CPU := cortex-a5
 ARCH_ARM_HAVE_TLS_REGISTER := true
 
 TARGET_BOOTLOADER_BOARD_NAME := y210
 TARGET_OTA_ASSERT_DEVICE := y210,hwy210
 
-# JB build requires this explicitly (CM9/ICS did not); hardware/qcom/display's
-# libtilerenderer is only defined when set, and frameworks/base/core/jni
-# links against it whenever BOARD_USES_QCOM_HARDWARE is true.
+# JB build requires this explicitly (CM9/ICS did not); libtilerenderer is
+# only defined when set, and frameworks/base/core/jni links against it
+# whenever BOARD_USES_QCOM_HARDWARE is true.
 USE_OPENGL_RENDERER := true
+# cm-10.1's hardware/qcom/display is the msm8960 one: MSM7x27A uses
+# hardware/qcom/display-legacy and media-legacy (legaCyMod, local manifest).
+TARGET_QCOM_DISPLAY_VARIANT := legacy
 
 # Host build hygiene: disable SREC grammar generation on modern hosts.
 # This avoids building `grxmlcompile` (OpenFst-based) which is not needed
@@ -48,9 +53,7 @@ TARGET_SPECIFIC_HEADER_PATH := device/huawei/y210/include
 #recovery
 BOARD_LDPI_RECOVERY := true
 BOARD_HAS_JANKY_BACKBUFFER := true
-# MSM7x27A's fb driver predates the msmfb_metadata/MSMFB_METADATA_SET alpha
-# blend ioctl that hardware/qcom/display/libgralloc now issues unconditionally
-# unless this is set; our device/kernel headers don't define it either.
+# The 2.6.38 MSM7x27A fb driver has no vsync ioctl (display-legacy NO_HW_VSYNC).
 TARGET_NO_HW_VSYNC := true
 # This device has no secure/DRM content-protection path (no TrustZone-backed
 # playback), and our kernel's msm_rotator_img_info predates the "secure"
@@ -59,12 +62,6 @@ COMMON_GLOBAL_CFLAGS += -DQCOM_NO_SECURE_PLAYBACK
 # camera.y210 (libcamera-caf) uses android::MemoryHeapPmem for the PMEM-backed
 # camera buffer heaps; frameworks/native/libs/binder only builds it when set.
 BOARD_NEEDS_MEMORYHEAPPMEM := true
-# Same HAL id-mismatch crash already found and fixed for vee4ss (see memory):
-# hardware.c's load() does `strcmp(id, hmi->id)` after dlsym'ing
-# HAL_MODULE_INFO_SYM, and hmi->id reads as garbage on this toolchain/build,
-# crashing (SEGV) instead of just failing the string compare. Hit here via
-# LightsService failing to load lights.y210.so during system_server startup.
-BOARD_DISABLE_HW_ID_MATCH_CHECK := true
 #BOARD_CUSTOM_GRAPHICS           := ../../../device/huawei/y210/recovery/graphics.c
 
 
@@ -74,17 +71,10 @@ BOARD_EGL_CFG := device/huawei/y210/prebuilt/system/lib/egl/egl.cfg
 # CM9 turned it off because dialogs of hwui apps came out tiled ~2.5x with
 # stale pixels (2026-10-20, see RENDER_NOTES.md); check dialogs on JB.
 BOARD_USES_QCOM_HARDWARE := true
-TARGET_USES_GENLOCK := true
 COMMON_GLOBAL_CFLAGS += -DQCOM_HARDWARE
 BOARD_USES_QCOM_LIBRPC := true
 BOARD_USES_QCOM_LIBS := true
-BOARD_USE_QCOM_PMEM := true
 COMMON_GLOBAL_CFLAGS += -DTARGET_MSM7x27A -DTARGET_MSM7x27
-# PARCHE-E: comentar la siguiente línea para desactivar copybit y aislar si
-# la repetición horizontal la causa el MDP blit path vs el render directo.
-# Reactivar una vez descartado o confirmado.
-TARGET_LIBAGL_USE_GRALLOC_COPYBITS := true
-TARGET_GRALLOC_USES_ASHMEM := true
 
 # GPU — from Dazzozo G300 CM9 (same MSM7x27A + Adreno200)
 BOARD_ADRENO_DECIDE_TEXTURE_TARGET := true
@@ -97,8 +87,10 @@ ENABLE_JSC_JIT := true
 JS_ENGINE := v8
 HTTP := chrome
 
+# Bluedroid (4.2 has no BlueZ). The Qualcomm Bahama is brought up by
+# hci_qcomm_init from our own libbt-vendor, then driven as plain H4 on ttyHS0.
 BOARD_HAVE_BLUETOOTH := true
-BOARD_HAVE_BLUETOOTH_BCM := true
+BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR := device/huawei/y210/bluetooth
 
 # FM Radio (Y210 has an FM-capable Qualcomm stack on some variants; keep
 # build-time support enabled so the FM app can be built/installed for testing.)
@@ -107,8 +99,8 @@ BOARD_GLOBAL_CFLAGS += -DHAVE_FM_RADIO
 # Qualcomm "tavarua" style V4L2 radio device.
 BOARD_FM_DEVICE := qcom
 
-# RIL
-# BOARD_PROVIDES_LIBRIL := true
+# RIL: HuaweiY210RIL (ro.telephony.ril_class) is built into telephony-common
+BOARD_RIL_CLASS := ../../../device/huawei/y210/ril/telephony/src/
 
 # Wi-Fi
 BOARD_WPA_SUPPLICANT_DRIVER := WEXT
@@ -137,7 +129,8 @@ BOARD_KERNEL_CMDLINE := console=ttyDCC0 androidboot.hardware=huawei
 BOARD_KERNEL_BASE := 0x00200000
 BOARD_KERNEL_PAGESIZE := 4096
 
-BOARD_HAS_EXTRA_SYS_PROPS := true
+# 256 MB of RAM
+TARGET_ARCH_LOWMEM := true
 
 # TARGET_RECOVERY_INITRC := device/huawei/y210/recovery/etc/init.rc
 # BOARD_DATA_DEVICE := /dev/block/mmcblk0p13
@@ -160,10 +153,6 @@ BOARD_VOLD_EMMC_SHARES_DEV_MAJOR := true
 BOARD_UMS_LUNFILE := /sys/devices/platform/usb_mass_storage/lun0/file
 
 COMMON_GLOBAL_CFLAGS += -DREFRESH_RATE=60
-
-# We ship our own root init.rc (device/huawei/y210/init.rc) so it can import
-# init.${ro.hardware}.rc / .usb.rc without touching system/core/rootdir/init.rc.
-TARGET_PROVIDES_INIT_RC := true
 
 # Offline charging lives in the recovery partition: with the charger plugged
 # in at power-on the bootloader boots recovery with charge_flag=1 and

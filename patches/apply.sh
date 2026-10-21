@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apply the Y210 patches to the CM9 platform projects.
+# Apply the Y210 patches to the CM10.1 platform projects.
 #
 # Layout: patches/<project path, '/' -> '_'>/NNNN-*.patch (git format-patch).
 # Run from anywhere after `repo sync`:

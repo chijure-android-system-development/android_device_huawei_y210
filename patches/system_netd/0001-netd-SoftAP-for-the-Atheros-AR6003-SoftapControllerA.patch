@@ -1,38 +1,38 @@
-From 86353acb75e02267961fc777fe6cbd730be288d4 Mon Sep 17 00:00:00 2001
+From 481513c78417d3a685abfe992f86bf67adc69c24 Mon Sep 17 00:00:00 2001
 From: Juan Manuel Reategui Solis <reateguisolisjm@gmail.com>
-Date: Tue, 20 Oct 2026 12:22:58 -0500
+Date: Tue, 20 Oct 2026 18:34:08 -0500
 Subject: [PATCH] netd: SoftAP for the Atheros AR6003 (SoftapControllerATH)
 
 CyanogenMod's gingerbread netd drove the ar6000 hotspot with
 SoftapControllerATH (ar6000.ko reloaded with ifname=athap0, stock hostapd
-on athap0, wpa_ctrl to it); ICS netd only had the generic nl80211 and TI
-controllers. Port it to the ICS SoftapController interface: built when
-WIFI_DRIVER_MODULE_NAME is ar6000. The ICS WifiStateMachine loads the
-driver in STA mode before "softap start" and unloads it itself after
-"softap stop", so startDriver reloads the module and stopDriver leaves it
-loaded; generatePsk and clientsSoftap (hostapd STA-FIRST/STA-NEXT) are
-added and wpa_ctrl_cleanup, gone from wpa_supplicant_8, is local.
+on athap0, wpa_ctrl to it). Built when WIFI_DRIVER_MODULE_NAME is ar6000.
+generatePsk and clientsSoftap (hostapd STA-FIRST/STA-NEXT) are added and
+the local socket cleanup is named hostapd_ctrl_cleanup: libwpa_client's
+wpa_ctrl_cleanup() would also remove system_server's sockets.
 
-JB: the controller choice sits in the TI if/else chain of this netd's
-Android.mk, the source uses the JB ALOGx macros, and the local socket cleanup is
-renamed hostapd_ctrl_cleanup: JB's libwpa_client has wpa_ctrl_cleanup(), but
-it would also remove system_server's sockets.
+4.2: SoftapController lost startDriver/stopDriver and CommandListener the
+"softap start/stop" commands, but NetworkManagementService still sends
+"softap start <iface>" with config_wifiApStartInterface, which is how the
+AR6003 reloads ar6000.ko in AP mode. Bring them back under ATH_SOFTAP, as
+legaCyMod's cm-10.1 netd does.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Change-Id: I7be972d1110494747e4788a7016961a51377bcfb
+Change-Id: Icc0532bba9f3f442f4f4ef6a23456e9ff6043395
 ---
- Android.mk              |   8 +
+ Android.mk              |   9 +
+ CommandListener.cpp     |   8 +
+ SoftapController.h      |   8 +
  SoftapControllerATH.cpp | 889 ++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 897 insertions(+)
+ 4 files changed, 914 insertions(+)
  create mode 100644 SoftapControllerATH.cpp
 
 diff --git a/Android.mk b/Android.mk
-index 95939df..103a145 100644
+index 84443d9..ea92935 100644
 --- a/Android.mk
 +++ b/Android.mk
-@@ -46,6 +46,14 @@ ifeq ($(BOARD_TI_SOFTAP),true)
- else
- ifeq ($(USES_TI_MAC80211),true)
+@@ -41,6 +41,15 @@ LOCAL_SHARED_LIBRARIES := libstlport libsysutils libcutils libnetutils \
+                           libcrypto libhardware_legacy libmdnssd libdl
+ ifdef USES_TI_MAC80211
    LOCAL_SRC_FILES += SoftapControllerTI.cpp
 +else ifeq ($(WIFI_DRIVER_MODULE_NAME),ar6000)
 +  # Atheros AR6003 (ar6000.ko, WEXT, hostapd on athap0)
@@ -42,9 +42,55 @@ index 95939df..103a145 100644
 +  LOCAL_SRC_FILES += SoftapControllerATH.cpp
 +  LOCAL_C_INCLUDES += external/wpa_supplicant_8/src/common
 +  LOCAL_SHARED_LIBRARIES += libwpa_client
++  LOCAL_CFLAGS += -DATH_SOFTAP
  else
    LOCAL_SRC_FILES += SoftapController.cpp
  endif
+diff --git a/CommandListener.cpp b/CommandListener.cpp
+index fdb26dd..e975432 100644
+--- a/CommandListener.cpp
++++ b/CommandListener.cpp
+@@ -839,6 +839,14 @@ int CommandListener::SoftapCmd::runCommand(SocketClient *cli,
+         return 0;
+     }
+ 
++#ifdef ATH_SOFTAP
++    /* config_wifiApStartInterface: the AR6003 reloads ar6000.ko for AP mode */
++    if (!strcmp(argv[1], "start")) {
++        rc = sSoftapCtrl->startDriver(argv[2]);
++    } else if (!strcmp(argv[1], "stop")) {
++        rc = sSoftapCtrl->stopDriver(argv[2]);
++    } else
++#endif
+     if (!strcmp(argv[1], "startap")) {
+         rc = sSoftapCtrl->startSoftap();
+     } else if (!strcmp(argv[1], "stopap")) {
+diff --git a/SoftapController.h b/SoftapController.h
+index 57241b9..afc4f78 100644
+--- a/SoftapController.h
++++ b/SoftapController.h
+@@ -27,6 +27,10 @@
+ #define AP_DRIVER_START_DELAY	800000
+ 
+ class SoftapController {
++#ifdef ATH_SOFTAP
++    char mBuf[SOFTAP_MAX_BUFFER_SIZE];
++    char mIface[IFNAMSIZ];
++#endif
+     pid_t mPid;
+     int mSock;
+ 
+@@ -36,6 +40,10 @@ public:
+     SoftapController();
+     virtual ~SoftapController();
+ 
++#ifdef ATH_SOFTAP
++    int startDriver(char *iface);
++    int stopDriver(char *iface);
++#endif
+     int startSoftap();
+     int stopSoftap();
+     bool isSoftapStarted();
 diff --git a/SoftapControllerATH.cpp b/SoftapControllerATH.cpp
 new file mode 100644
 index 0000000..d722dc3

@@ -26,6 +26,7 @@
 #
 
 import /init.y210.rc
+import /init.huawei.usb.rc
 
 # vold mounts the external card onto /storage/sdcard0 (see vold.fstab --
 # this is the path JB's MountService/StorageManager actually recognize as
@@ -38,8 +39,10 @@ import /init.y210.rc
 # rootfs read-only ("mount rootfs rootfs / ro remount"), so a mkdir there
 # fails silently and /storage/sdcard0 never gets created.
 on init
-    mkdir /storage 0751 root root
+    # 4.2's init.rc mounts the /storage tmpfs; the primary volume is the
+    # physical card (no emulated storage on this device).
     mkdir /storage/sdcard0 0000 system system
+    export EXTERNAL_STORAGE /storage/sdcard0
     symlink /storage/sdcard0 /sdcard
     symlink /storage/sdcard0 /mnt/sdcard
 

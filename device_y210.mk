@@ -28,7 +28,6 @@ PRODUCT_PACKAGES += \
 # Audio
 PRODUCT_PACKAGES += \
     libaudio \
-    libaudiopolicy \
     audio.a2dp.default \
     audio.primary.y210 \
     audio_policy.msm7x27a
@@ -61,10 +60,10 @@ PRODUCT_PACKAGES += \
     rild \
     Mms
 
-# RIL: shim for libril-qc-1 and the HuaweiY210RIL class (ril/)
+# RIL: shim for libril-qc-1 (ril/rilshim); the HuaweiY210RIL class goes into
+# telephony-common through BOARD_RIL_CLASS
 PRODUCT_PACKAGES += \
-    libril-y210-shim \
-    y210-telephony
+    libril-y210-shim
 
 # Install the features available on this device.
 PRODUCT_COPY_FILES += \
@@ -76,7 +75,6 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.touchscreen.multitouch.distinct.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.distinct.xml
 
 PRODUCT_COPY_FILES += \
-    device/huawei/y210/init.rc:root/init.rc \
     device/huawei/y210/prebuilt/init.huawei.rc:root/init.huawei.rc \
     device/huawei/y210/prebuilt/init.target.rc:root/init.target.rc \
     device/huawei/y210/prebuilt/init.y210.rc:root/init.y210.rc \
@@ -129,7 +127,11 @@ PRODUCT_COPY_FILES += \
     device/huawei/y210/prebuilt/system/etc/init.qcom.wifi.sh:system/etc/init.qcom.wifi.sh \
     $(call find-copy-subdir-files,*,device/huawei/y210/prebuilt/system/wifi/ath6k,system/wifi/ath6k)
 
-# Bluetooth firmware and scripts (Broadcom)
+# Bluetooth: Bluedroid vendor lib for the Qualcomm Bahama (libbt-vendor/)
+PRODUCT_PACKAGES += \
+    libbt-vendor
+
+# Bluetooth firmware and scripts
 PRODUCT_COPY_FILES += \
     $(call find-copy-subdir-files,*,device/huawei/y210/prebuilt/system/etc/bluetooth,system/etc/bluetooth)
 
