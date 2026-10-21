@@ -1429,7 +1429,8 @@ QualcommCameraHardware::QualcommCameraHardware()
       mExpBracketMode(false),
       mZslEnable(false),
       mStoreMetaDataInFrame(0),
-      mRecordingState(0)
+      mRecordingState(0),
+      mRecordingOpsStarted(false)
 {
     ALOGI("QualcommCameraHardware constructor E");
     mMMCameraDLRef = MMCameraDL::getInstance();
@@ -4889,7 +4890,13 @@ status_t QualcommCameraHardware::getBuffersAndStartPreview() {
 
                   //thumbnailHandle = (private_handle_t *)mThumbnailBuffer->handle;
                   ALOGV("fd mmap fd %d size %d", handle->fd, handle->size/*thumbnailHandle->size*/);
-                  mPreviewMapped[cnt]= mGetMemory(handle->fd,handle->size,1,mCallbackCookie);
+                  /* Map the frame, not the page-rounded gralloc buffer: these
+                   * memories are what video and preview callbacks hand out, and
+                   * 4.2's OMXCodec rejects a frame larger than its input buffer
+                   * (152064 for CIF vs 155648 from gralloc). */
+                  size_t frameSize = (size_t)mBufferSize < (size_t)handle->size ?
+                          (size_t)mBufferSize : (size_t)handle->size;
+                  mPreviewMapped[cnt]= mGetMemory(handle->fd,frameSize,1,mCallbackCookie);
 
                   if((void *)mPreviewMapped[cnt] == NULL){
                       ALOGE(" Failed to get camera memory for  Preview buffer %d ",cnt);
@@ -9750,10 +9757,14 @@ static void receive_camframe_video_callback(struct msm_frame *frame)
 
 int QualcommCameraHardware::storeMetaDataInBuffers(int enable)
 {
-        /* this is a dummy func now. fix me later */
-    ALOGI("in storeMetaDataInBuffers : enable %d", enable);
-    mStoreMetaDataInFrame = enable;
-    return 0;
+    /* Metadata buffers only make sense with the hardware video encoder
+     * (/dev/msm_vidc_enc), which the Y210 kernel does not have. Accepting
+     * them made 4.2's CameraSource expect metadata while the software H.263
+     * encoder needs YUV frames, and mediaserver crashed on the first video
+     * frame. Refuse, so CameraSource hands over the YUV frames (as on CM9). */
+    ALOGI("in storeMetaDataInBuffers : enable %d (refused)", enable);
+    mStoreMetaDataInFrame = 0;
+    return enable ? INVALID_OPERATION : NO_ERROR;
 }
 
 void QualcommCameraHardware::setCallbacks(camera_notify_callback notify_cb,
@@ -9789,7 +9800,9 @@ void QualcommCameraHardware::enableMsgType(int32_t msgType)
     mMsgEnabled |= msgType;
     if( (mCurrentTarget != TARGET_MSM7630 ) &&  (mCurrentTarget != TARGET_QSD8250) && (mCurrentTarget != TARGET_MSM8660)) {
       if(mMsgEnabled & CAMERA_MSG_VIDEO_FRAME){
-        native_start_ops(CAMERA_OPS_VIDEO_RECORDING, NULL);
+        /* The MSM7x27A blob refuses this while previewing ("illegal state")
+         * and records from the preview frames anyway. */
+        mRecordingOpsStarted = native_start_ops(CAMERA_OPS_VIDEO_RECORDING, NULL);
         mRecordingState = 1;
       }
     }
@@ -9800,7 +9813,11 @@ void QualcommCameraHardware::disableMsgType(int32_t msgType)
     Mutex::Autolock lock(mLock);
     if( (mCurrentTarget != TARGET_MSM7630 ) &&  (mCurrentTarget != TARGET_QSD8250) && (mCurrentTarget != TARGET_MSM8660)) {
       if(mMsgEnabled & CAMERA_MSG_VIDEO_FRAME){
-        native_stop_ops(CAMERA_OPS_VIDEO_RECORDING, NULL);
+        /* Stopping what the blob refused to start blocks 10 s in the
+         * control ioctl (ETIMEDOUT) on every stop of a recording. */
+        if (mRecordingOpsStarted)
+            native_stop_ops(CAMERA_OPS_VIDEO_RECORDING, NULL);
+        mRecordingOpsStarted = false;
         mRecordingState = 0;
       }
     }

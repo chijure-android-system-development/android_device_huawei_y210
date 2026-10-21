@@ -642,6 +642,8 @@ private:
     bool mMultiTouch;
 
     int mRecordingState;
+    /* CAMERA_OPS_VIDEO_RECORDING was accepted by the blob (see enableMsgType) */
+    bool mRecordingOpsStarted;
 };
 
 extern "C" int HAL_getNumberOfCameras();
