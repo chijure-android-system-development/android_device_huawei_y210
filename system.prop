@@ -13,7 +13,7 @@ ro.telephony.ril_class=HuaweiY210RIL
 # unlock PIN" screen (seen on CM7). With it, only a real network lock does.
 # signalstrength: qcril fills the LTE fields with 99/-32767 instead of -1, so
 # SignalStrength took the phone as LTE and showed 0 bars / -32767 dBm.
-ro.telephony.ril.v3=qcomuiccstack,signalstrength
+ro.telephony.ril.v3=qcomuiccstack,signalstrength,skippinpukcount
 ril.subscription.types=NV,RUIM
 ro.baseband=msm
 ro.sf.lcd_density=160
