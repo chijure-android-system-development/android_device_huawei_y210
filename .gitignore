@@ -1,0 +1,2 @@
+# Public key of the developer PC, baked into root/adb_keys (device_y210.mk)
+adb_keys

@@ -102,6 +102,14 @@ PRODUCT_COPY_FILES += \
 	    device/huawei/y210/prebuilt/system/bin/kmsgcat:system/bin/kmsgcat \
 	    device/huawei/y210/prebuilt/system/bin/diag_mdlog:system/bin/diag_mdlog
 
+# ro.adb.secure=1 comes from vendor/cm for every non-eng build. adbd also
+# trusts /adb_keys, so a local, untracked adb_keys (e.g. a copy of
+# ~/.android/adbkey.pub) keeps that PC authorized across wipes.
+ifneq ($(wildcard device/huawei/y210/adb_keys),)
+PRODUCT_COPY_FILES += \
+    device/huawei/y210/adb_keys:root/adb_keys
+endif
+
 # File manager prebuilt — copy FileManager.apk to prebuilt/system/app/ to include in ROM
 # Example: cp ~/EsFileExplorer.apk device/huawei/y210/prebuilt/system/app/FileManager.apk
 ifneq ($(wildcard device/huawei/y210/prebuilt/system/app/FileManager.apk),)
