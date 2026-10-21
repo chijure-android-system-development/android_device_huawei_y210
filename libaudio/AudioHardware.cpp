@@ -1099,9 +1099,6 @@ unsigned int AudioHardware::calculate_audpre_table_index(unsigned index)
 
 AudioStreamOut* AudioHardware::openOutputStream(
         uint32_t devices,
-#ifdef QCOM_HARDWARE
-        audio_output_flags_t flags,
-#endif
         int *format, uint32_t *channels, uint32_t *sampleRate, status_t *status)
 {
     Mutex::Autolock lock(mLock);

@@ -1,34 +1,36 @@
 LOCAL_PATH:= $(call my-dir)
+
+# Audio policy: CAF msm7627a AudioPolicyManager, the JB-MR1 (4.2) release as
+# carried by the ZTE Blade III (KonstaT/android_device_zte_atlas40 cm-10.1).
+# CM10 got the JB one from hardware/qcom/audio/msm7627a, which cm-10.1 lacks.
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:=               \
-    AudioPolicyManager.cpp
+LOCAL_SRC_FILES := \
+    AudioPolicyManager.cpp \
+    audio_policy_hal.cpp
 
 LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
     libmedia
 
-LOCAL_STATIC_LIBRARIES := libmedia_helper
+LOCAL_STATIC_LIBRARIES := \
+    libaudiohw_legacy \
+    libmedia_helper \
+    libaudiopolicy_legacy
 
-LOCAL_WHOLE_STATIC_LIBRARIES := libaudiopolicy_legacy
-
-LOCAL_C_INCLUDES += \
-    hardware/libhardware_legacy/include
-
-LOCAL_MODULE:= libaudiopolicy
+LOCAL_MODULE := audio_policy.msm7x27a
+LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
+LOCAL_MODULE_TAGS := optional
+# Same GNU_RELRO/HAL_MODULE_INFO_SYM layout hazard fixed for liblights —
+# see device/huawei/y210/liblights/Android.mk for the full explanation.
+LOCAL_LDFLAGS += -Wl,-z,norelro
 
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
 endif
 
-# See device/huawei/y210/libaudio's "libaudio" module block below for why
-# this is disabled -- keep every HAVE_FM_RADIO block in this file and in
-# hardware/libhardware_legacy/audio/Android.mk in sync (all 4 currently
-# commented out together).
-#ifeq ($(BOARD_HAVE_FM_RADIO),true)
-#  LOCAL_CFLAGS += -DHAVE_FM_RADIO
-#endif
+LOCAL_C_INCLUDES := hardware/libhardware_legacy/audio
 
 include $(BUILD_SHARED_LIBRARY)
 
